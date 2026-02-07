@@ -155,7 +155,7 @@ a { color: var(--color-blue); text-decoration: none; }
 .sidebar-logo {
   display: flex;
   align-items: center;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   padding: 0 var(--space-md);
   margin-bottom: var(--space-xl);
 }

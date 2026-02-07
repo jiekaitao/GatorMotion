@@ -45,7 +45,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <Image src="/gatormove-icon.png" alt="GatorMove" width={217} height={128} style={{ height: "36px", width: "auto" }} />
+        <Image src="/gatormove-icon.png" alt="GatorMove" width={217} height={128} style={{ height: "32px", width: "auto" }} />
         <h1>GatorMove</h1>
       </div>
 
