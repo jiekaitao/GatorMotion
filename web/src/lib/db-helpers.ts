@@ -358,3 +358,135 @@ export async function getPatientsByTherapist(therapistId: string) {
     streak: streakMap.get(p._id.toString()) || null,
   }));
 }
+
+// ── Messages ──
+
+export interface DbMessage {
+  _id: ObjectId;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  read: boolean;
+  createdAt: Date;
+}
+
+export async function sendMessage(data: {
+  senderId: string;
+  receiverId: string;
+  content: string;
+}) {
+  const db = await getDb();
+  const result = await db.collection("messages").insertOne({
+    ...data,
+    read: false,
+    createdAt: new Date(),
+  });
+  return result.insertedId;
+}
+
+export async function getConversation(userId1: string, userId2: string, limit = 50) {
+  const db = await getDb();
+  return db
+    .collection<DbMessage>("messages")
+    .find({
+      $or: [
+        { senderId: userId1, receiverId: userId2 },
+        { senderId: userId2, receiverId: userId1 },
+      ],
+    })
+    .sort({ createdAt: 1 })
+    .limit(limit)
+    .toArray();
+}
+
+export async function getConversationList(userId: string) {
+  const db = await getDb();
+
+  // Find all unique users this person has messaged with
+  const sent = await db.collection<DbMessage>("messages").distinct("receiverId", { senderId: userId });
+  const received = await db.collection<DbMessage>("messages").distinct("senderId", { receiverId: userId });
+
+  const partnerIds = [...new Set([...sent, ...received])];
+
+  // For each partner, get the last message and unread count
+  const conversations = await Promise.all(
+    partnerIds.map(async (partnerId) => {
+      const lastMessage = await db
+        .collection<DbMessage>("messages")
+        .find({
+          $or: [
+            { senderId: userId, receiverId: partnerId },
+            { senderId: partnerId, receiverId: userId },
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .limit(1)
+        .toArray();
+
+      const unread = await db.collection<DbMessage>("messages").countDocuments({
+        senderId: partnerId,
+        receiverId: userId,
+        read: false,
+      });
+
+      // Get partner info
+      const partner = await db
+        .collection<DbUser>("users")
+        .findOne({ _id: new ObjectId(partnerId) }, { projection: { passwordHash: 0 } });
+
+      return {
+        partnerId,
+        partnerName: partner?.name || "Unknown",
+        partnerRole: partner?.role || "patient",
+        lastMessage: lastMessage[0] || null,
+        unreadCount: unread,
+      };
+    })
+  );
+
+  // Sort by most recent message
+  return conversations.sort((a, b) => {
+    const aTime = a.lastMessage?.createdAt?.getTime() || 0;
+    const bTime = b.lastMessage?.createdAt?.getTime() || 0;
+    return bTime - aTime;
+  });
+}
+
+export async function markMessagesRead(senderId: string, receiverId: string) {
+  const db = await getDb();
+  await db.collection("messages").updateMany(
+    { senderId, receiverId, read: false },
+    { $set: { read: true } }
+  );
+}
+
+// ── User Profile Updates ──
+
+export async function updateUserProfile(userId: string, data: { name?: string; email?: string }) {
+  const db = await getDb();
+  const update: Record<string, string> = {};
+  if (data.name) update.name = data.name;
+  if (data.email) update.email = data.email.toLowerCase();
+
+  if (Object.keys(update).length === 0) return false;
+
+  const result = await db.collection("users").updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: update }
+  );
+  return result.modifiedCount > 0;
+}
+
+export async function updateUserPassword(userId: string, newPasswordHash: string) {
+  const db = await getDb();
+  const result = await db.collection("users").updateOne(
+    { _id: new ObjectId(userId) },
+    { $set: { passwordHash: newPasswordHash } }
+  );
+  return result.modifiedCount > 0;
+}
+
+export async function findUserById(userId: string) {
+  const db = await getDb();
+  return db.collection<DbUser>("users").findOne({ _id: new ObjectId(userId) });
+}

@@ -3,6 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -42,10 +43,11 @@ export default function RegisterPage() {
 
   return (
     <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100vh", paddingBottom: "var(--space-2xl)" }}>
-      <div className="animate-in" style={{ marginBottom: "var(--space-xl)" }}>
-        <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800 }}>Create Account</h1>
+      <div className="animate-in" style={{ marginBottom: "var(--space-xl)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <Image src="/gatormove-logo.png" alt="GatorMove" width={1536} height={1024} style={{ height: "80px", width: "auto" }} priority />
+        <h1 style={{ marginTop: "var(--space-md)", fontSize: "var(--text-display)", fontWeight: 800 }}>Create Account</h1>
         <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
-          Join PhysioStreak and start your recovery journey
+          Join GatorMove and start your recovery journey
         </p>
       </div>
 

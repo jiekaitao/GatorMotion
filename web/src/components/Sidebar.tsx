@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Home,
   BarChart3,
@@ -11,7 +12,6 @@ import {
   Users,
   Wrench,
   Settings,
-  Heart,
 } from "lucide-react";
 
 const patientLinks = [
@@ -45,7 +45,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <Heart size={32} color="#58CC02" fill="#58CC02" />
+        <Image src="/gatormove-icon.png" alt="GatorMove" width={217} height={128} style={{ height: "36px", width: "auto" }} />
         <h1>GatorMove</h1>
       </div>
 
@@ -73,28 +73,17 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="sidebar-footer">
-        <button
+        <Link
+          href="/settings"
+          className={`sidebar-link ${pathname.startsWith("/settings") ? "active" : ""}`}
           style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "var(--radius-xl)",
-            border: "2px solid var(--color-gray-100)",
-            background: "none",
-            fontWeight: 700,
-            color: "var(--color-gray-400)",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-            fontSize: "var(--text-small)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
             justifyContent: "center",
-            gap: "var(--space-sm)",
+            border: "2px solid var(--color-gray-100)",
           }}
         >
           <Settings size={18} />
-          Settings
-        </button>
+          <span>Settings</span>
+        </Link>
       </div>
     </aside>
   );

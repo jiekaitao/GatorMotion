@@ -64,17 +64,17 @@ export default function StreakFlame({
             />
           </linearGradient>
         </defs>
-        {/* Outer flame shape */}
+        {/* Outer flame — sharp tip, wide body, rounded base */}
         <path
-          d="M32 4C32 4 18 18 18 32C18 38 20 43 24 46C22 42 22 36 26 30C26 30 28 38 32 42C36 38 38 30 38 30C42 36 42 42 40 46C44 43 46 38 46 32C46 18 32 4 32 4Z"
+          d="M32 4C32 4 28 12 25 18C21 26 16 31 16 40C16 48 23 56 32 56C41 56 48 48 48 40C48 31 43 26 39 18C36 12 32 4 32 4Z"
           fill={`url(#${gradientId})`}
           stroke={isLit ? "#E58600" : "#CDCDCD"}
-          strokeWidth="2"
+          strokeWidth="1.5"
           strokeLinejoin="round"
         />
-        {/* Inner flame */}
+        {/* Inner flame tongue */}
         <path
-          d="M32 24C32 24 26 32 26 38C26 42 28.5 45 32 46C35.5 45 38 42 38 38C38 32 32 24 32 24Z"
+          d="M32 22C32 22 26 34 26 41C26 46 28.5 50 32 52C35.5 50 38 46 38 41C38 34 32 22 32 22Z"
           fill={`url(#${gradientId}-inner)`}
         />
       </svg>

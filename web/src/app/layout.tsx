@@ -10,6 +10,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "GatorMove",
   description: "Your physical therapy companion. Complete exercises, build streaks, recover stronger.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({

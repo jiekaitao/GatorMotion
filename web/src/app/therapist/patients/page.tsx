@@ -31,6 +31,7 @@ export default function TherapistPatientsPage() {
   const [sending, setSending] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -71,10 +72,22 @@ export default function TherapistPatientsPage() {
       }
 
       setInviteEmail("");
-      // Refresh invites
-      const iRes = await fetch("/api/invites");
+
+      // Show feedback if auto-linked
+      if (data.autoLinked) {
+        setSuccessMsg(data.message || "Patient linked!");
+        setTimeout(() => setSuccessMsg(""), 4000);
+      }
+
+      // Refresh invites + patients
+      const [iRes, pRes] = await Promise.all([
+        fetch("/api/invites"),
+        fetch("/api/patients"),
+      ]);
       const iData = await iRes.json();
+      const pData = await pRes.json();
       setInvites(iData.invites || []);
+      setPatients(pData.patients || []);
     } catch {
       setError("Something went wrong");
     } finally {
@@ -131,6 +144,9 @@ export default function TherapistPatientsPage() {
           </form>
           {error && (
             <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)" }}>{error}</p>
+          )}
+          {successMsg && (
+            <p style={{ color: "var(--color-green-dark)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)", backgroundColor: "var(--color-green-surface)", padding: "8px 12px", borderRadius: "var(--radius-sm)" }}>{successMsg}</p>
           )}
         </div>
 

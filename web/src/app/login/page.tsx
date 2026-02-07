@@ -3,7 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import StreakFlame from "@/components/StreakFlame";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,10 +41,10 @@ export default function LoginPage() {
 
   return (
     <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100vh", paddingBottom: "var(--space-2xl)" }}>
-      <div className="animate-in text-center" style={{ marginBottom: "var(--space-xl)" }}>
-        <StreakFlame fillPercent={0} streakCount={0} size={72} />
+      <div className="animate-in text-center" style={{ marginBottom: "var(--space-xl)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <Image src="/gatormove-logo.png" alt="GatorMove" width={1536} height={1024} style={{ height: "120px", width: "auto" }} priority />
         <h1 style={{ marginTop: "var(--space-md)", fontSize: "var(--text-display)", fontWeight: 800 }}>
-          PhysioStreak
+          GatorMove
         </h1>
         <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
           Your PT recovery companion

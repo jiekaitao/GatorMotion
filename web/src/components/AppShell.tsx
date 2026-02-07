@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
-import { Heart, Flame } from "lucide-react";
+import Image from "next/image";
+import { Flame } from "lucide-react";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -36,7 +37,7 @@ export default function AppShell({ children, streakCount, hideDesktopHeader }: A
       <main className="main-content">
         {/* Mobile Header */}
         <div className="mobile-header">
-          <Heart size={28} color="#58CC02" fill="#58CC02" />
+          <Image src="/gatormove-icon.png" alt="GatorMove" width={217} height={128} style={{ height: "28px", width: "auto" }} />
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
             {streakCount !== undefined && (
               <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-orange)", fontWeight: 700 }}>
