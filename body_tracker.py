@@ -193,6 +193,7 @@ last_feedback_ts = 0.0
 continuous_coaching = False
 last_coaching_run = 0.0
 coaching_interval = float(os.getenv("COACHING_INTERVAL_SEC", "3.0"))
+show_joint_data = True
 
 print("Camera opened. Press 'q' to quit.")
 print(f"[Config] Gemini configured: {'yes' if gemini_coach.api_key else 'no'}")
@@ -252,6 +253,44 @@ while cap.isOpened():
                         cv2.rectangle(frame, (cx - 2, cy - th - 4), (cx + tw + 2, cy + 2), (0, 0, 0), -1)
                         cv2.putText(frame, label, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1)
 
+            if show_joint_data:
+                panel_x = 10
+                panel_y = 90
+                panel_w = 470
+                panel_h = 20 + (len(POSE_LABELS) * 18)
+                overlay = frame.copy()
+                cv2.rectangle(overlay, (panel_x, panel_y), (panel_x + panel_w, panel_y + panel_h), (0, 0, 0), -1)
+                cv2.addWeighted(overlay, 0.45, frame, 0.55, 0, frame)
+
+                cv2.putText(
+                    frame,
+                    "Pose Joint Data (x, y, z, vis)",
+                    (panel_x + 8, panel_y + 16),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.47,
+                    (220, 220, 220),
+                    1,
+                )
+
+                row = 0
+                for idx, label in POSE_LABELS.items():
+                    if idx >= len(pose_lms):
+                        continue
+                    lm = pose_lms[idx]
+                    vis = lm.visibility if lm.visibility is not None else 0.0
+                    text = f"{label:10s}  x={lm.x:.3f}  y={lm.y:.3f}  z={lm.z:.3f}  vis={vis:.2f}"
+                    y = panel_y + 34 + (row * 18)
+                    cv2.putText(
+                        frame,
+                        text,
+                        (panel_x + 8, y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.43,
+                        (170, 255, 170),
+                        1,
+                    )
+                    row += 1
+
     # ── Draw Hands ──
     if latest_hands and latest_hands.hand_landmarks:
         for i, hand_lms in enumerate(latest_hands.hand_landmarks):
@@ -281,6 +320,8 @@ while cap.isOpened():
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
     cv2.putText(frame, "Press V to toggle continuous coaching", (10, h - 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
+    cv2.putText(frame, "Press J to toggle joint data", (10, h - 65),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
 
     cv2.imshow("Body Tracker", frame)
 
@@ -296,6 +337,11 @@ while cap.isOpened():
         else:
             latest_feedback = "Continuous coaching OFF"
             last_feedback_ts = time.time()
+
+    if key == ord("j"):
+        show_joint_data = not show_joint_data
+        state = "ON" if show_joint_data else "OFF"
+        print(f"[Display] Joint data {state}")
 
     if key == ord("q"):
         break
