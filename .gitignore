@@ -1,0 +1,8 @@
+credentials.txt
+DOC_credentials.txt
+.env*
+*.task
+models/
+__pycache__/
+node_modules/
+
