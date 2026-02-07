@@ -8,6 +8,14 @@ import cv2
 import mediapipe as mp
 import time
 import os
+import shlex
+import json
+
+from coaching_pipeline import (
+    build_ml_interpretation_prompt,
+    GeminiCoach,
+    ElevenLabsTTS,
+)
 
 from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python.vision import (
@@ -20,6 +28,70 @@ from mediapipe.tasks.python.vision import (
 )
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_PATH = os.path.join(SCRIPT_DIR, ".env")
+
+
+def load_env_file(path: str) -> None:
+    if not os.path.exists(path):
+        return
+
+    def parse_env_line(value: str) -> str:
+        # Strip inline comments safely.
+        lexer = shlex.shlex(value, posix=True)
+        lexer.whitespace_split = True
+        lexer.commenters = "#"
+        tokens = list(lexer)
+        return " ".join(tokens).strip().strip("'").strip('"')
+
+    with open(path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = parse_env_line(value.strip())
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
+def load_ml_judgement() -> dict | None:
+    """
+    Optional hook for external ML posture classifier output.
+    Expects a JSON file path in ML_JUDGEMENT_PATH.
+    """
+    path = os.getenv("ML_JUDGEMENT_PATH")
+    if not path:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        return None
+    return None
+
+
+def is_desired_position(ml_judgement: dict) -> bool:
+    """
+    Generic desired-position detector for flexible ML schemas.
+    Returns True when ML output explicitly signals target position achieved.
+    """
+    if not isinstance(ml_judgement, dict):
+        return False
+
+    for key in ("desired_position", "target_reached", "position_correct", "is_correct"):
+        if key in ml_judgement and isinstance(ml_judgement[key], bool):
+            return ml_judgement[key]
+
+    status = ml_judgement.get("status")
+    if isinstance(status, str) and status.strip().lower() in {"correct", "aligned", "good", "ready", "ok"}:
+        return True
+
+    return False
 
 # ── Model paths ──
 MODELS_DIR = os.path.join(SCRIPT_DIR, "models")
@@ -104,9 +176,27 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 if not cap.isOpened():
     print("ERROR: Cannot open camera")
+    pose_landmarker.close()
+    hand_landmarker.close()
+    face_landmarker.close()
     exit(1)
 
+load_env_file(ENV_PATH)
+gemini_coach = GeminiCoach(api_key=os.getenv("GEMINI_API_KEY"))
+tts_client = ElevenLabsTTS(
+    api_key=os.getenv("ELEVENLABS_API_KEY"),
+    voice_id=os.getenv("ELEVENLABS_VOICE_ID"),
+)
+
+latest_feedback = "Press V for voice coaching"
+last_feedback_ts = 0.0
+continuous_coaching = False
+last_coaching_run = 0.0
+coaching_interval = float(os.getenv("COACHING_INTERVAL_SEC", "3.0"))
+
 print("Camera opened. Press 'q' to quit.")
+print(f"[Config] Gemini configured: {'yes' if gemini_coach.api_key else 'no'}")
+print(f"[Config] ElevenLabs configured: {'yes' if tts_client.api_key and tts_client.voice_id else 'no'}")
 prev_time = time.time()
 
 while cap.isOpened():
@@ -186,13 +276,59 @@ while cap.isOpened():
     fps = 1.0 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
     prev_time = curr_time
     cv2.putText(frame, f"FPS: {int(fps)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+    cv2.putText(frame, latest_feedback, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (120, 255, 120), 2)
     cv2.putText(frame, "Pose(heavy) + Hands + Face Mesh | Press Q to quit", (10, h - 15),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
+    cv2.putText(frame, "Press V to toggle continuous coaching", (10, h - 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
 
     cv2.imshow("Body Tracker", frame)
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord("v"):
+        continuous_coaching = not continuous_coaching
+        mode = "ON" if continuous_coaching else "OFF"
+        print(f"[Coaching] Continuous coaching {mode}")
+        if continuous_coaching:
+            last_coaching_run = 0.0
+            latest_feedback = "Continuous coaching ON"
+            last_feedback_ts = time.time()
+        else:
+            latest_feedback = "Continuous coaching OFF"
+            last_feedback_ts = time.time()
+
+    if key == ord("q"):
         break
+
+    if continuous_coaching and (time.time() - last_coaching_run) >= coaching_interval:
+        last_coaching_run = time.time()
+        ml_judgement = load_ml_judgement()
+        if not ml_judgement:
+            latest_feedback = "No ML JSON found. Set ML_JUDGEMENT_PATH to a valid JSON file."
+            continue
+
+        if is_desired_position(ml_judgement):
+            continuous_coaching = False
+            latest_feedback = "Desired position reached. Coaching stopped."
+            last_feedback_ts = time.time()
+            print("[Coaching] Desired position reached. Stopping continuous coaching.")
+            continue
+
+        prompt = build_ml_interpretation_prompt(ml_judgement)
+        feedback = gemini_coach.generate_feedback(prompt)
+        latest_feedback = feedback
+        last_feedback_ts = time.time()
+        audio_path = tts_client.speak(feedback)
+        print(f"[Coaching] {feedback}")
+        if audio_path:
+            print(f"[ElevenLabs] Audio saved to {audio_path}")
+        else:
+            print(f"[ElevenLabs] Failed: {tts_client.last_error or 'unknown error'}")
+
+    # Reset overlay after a short duration so text does not crowd the screen.
+    if last_feedback_ts and time.time() - last_feedback_ts > 6:
+        latest_feedback = "Press V for voice coaching"
+        last_feedback_ts = 0.0
 
 pose_landmarker.close()
 hand_landmarker.close()
