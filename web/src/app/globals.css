@@ -232,8 +232,23 @@ a { color: var(--color-blue); text-decoration: none; }
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+  min-width: 0;
+}
+
+/* ── Page Transition ── */
+.page-transition {
+  animation: pageIn 0.3s var(--ease-out) both;
+}
+
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── Buttons ── */
@@ -537,13 +552,14 @@ a { color: var(--color-blue); text-decoration: none; }
 
 /* ── Layout Utilities ── */
 .page {
+  max-width: 800px;
   padding: var(--space-md) var(--space-md);
   padding-bottom: 100px;
 }
 
 @media (min-width: 768px) {
   .page {
-    padding: var(--space-xl);
+    padding: var(--space-xl) var(--space-xl);
     padding-bottom: var(--space-xl);
   }
 }

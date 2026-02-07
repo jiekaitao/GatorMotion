@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import { Heart, Flame } from "lucide-react";
@@ -12,6 +13,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children, streakCount, hideDesktopHeader }: AppShellProps) {
+  const pathname = usePathname();
   const [avatarInitial, setAvatarInitial] = useState("");
 
   useEffect(() => {
@@ -106,7 +108,10 @@ export default function AppShell({ children, streakCount, hideDesktopHeader }: A
           </header>
         )}
 
-        {children}
+        {/* Page content with transition keyed to route */}
+        <div key={pathname} className="page-transition">
+          {children}
+        </div>
       </main>
 
       {/* Mobile Bottom Tab Bar */}
