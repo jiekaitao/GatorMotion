@@ -6,9 +6,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Home,
-  BarChart3,
-  MessageCircle,
-  User,
   Users,
   Wrench,
   Settings,
@@ -16,16 +13,11 @@ import {
 
 const patientLinks = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/progress", label: "Progress", icon: BarChart3 },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
-  { href: "/profile", label: "Profile", icon: User },
 ];
 
 const therapistLinks = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/therapist/patients", label: "Patients", icon: Users },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
-  { href: "/profile", label: "Profile", icon: User },
 ];
 
 export default function Sidebar() {

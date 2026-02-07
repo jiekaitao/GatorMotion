@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, FormEvent } from "react";
-import AppShell from "@/components/AppShell";
+
 import { CheckCircle2, Circle } from "lucide-react";
 
 interface Exercise {
@@ -96,7 +96,7 @@ export default function DevAssignmentsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Assignments</h1>
         {/* Create Assignment */}
@@ -195,6 +195,6 @@ export default function DevAssignmentsPage() {
         </div>
       </div>
 
-    </AppShell>
+    </>
   );
 }

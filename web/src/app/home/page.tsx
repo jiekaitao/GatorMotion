@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import AppShell from "@/components/AppShell";
+
 import {
   Users,
   Play,
@@ -13,6 +13,11 @@ import {
   Dumbbell,
   Timer,
   Star,
+  Flame,
+  Award,
+  TrendingUp,
+  MessageCircle,
+  User,
 } from "lucide-react";
 
 interface Exercise {
@@ -31,6 +36,21 @@ interface Assignment {
   date: string;
 }
 
+interface StreakData {
+  currentStreak: number;
+  longestStreak: number;
+  lastCompletedDate: string | null;
+  history: string[];
+}
+
+interface Conversation {
+  partnerId: string;
+  partnerName: string;
+  partnerRole: string;
+  lastMessage: { content: string; createdAt: string; senderId: string } | null;
+  unreadCount: number;
+}
+
 interface UserData {
   user: { id: string; name: string; email: string; role: string };
   streak: { currentStreak: number; longestStreak: number; lastCompletedDate: string | null };
@@ -40,13 +60,17 @@ export default function HomePage() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [streakData, setStreakData] = useState<StreakData | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [meRes, assignRes] = await Promise.all([
+      const [meRes, assignRes, streakRes, msgRes] = await Promise.all([
         fetch("/api/auth/me"),
         fetch("/api/assignments?view=today"),
+        fetch("/api/streaks"),
+        fetch("/api/messages"),
       ]);
 
       if (!meRes.ok) {
@@ -56,6 +80,14 @@ export default function HomePage() {
 
       const meData = await meRes.json();
       const assignData = await assignRes.json();
+      if (streakRes.ok) {
+        const sData = await streakRes.json();
+        setStreakData(sData.streak);
+      }
+      if (msgRes.ok) {
+        const msgData = await msgRes.json();
+        setConversations(msgData.conversations || []);
+      }
 
       setUserData(meData);
       setAssignment(assignData.assignment);
@@ -81,7 +113,7 @@ export default function HomePage() {
   // Therapist view
   if (userData.user.role === "therapist") {
     return (
-      <AppShell>
+      <>
         <div className="page">
           <div className="animate-in" style={{ marginBottom: "var(--space-xl)" }}>
             <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800 }}>
@@ -104,7 +136,7 @@ export default function HomePage() {
             </div>
           </Link>
         </div>
-      </AppShell>
+      </>
     );
   }
 
@@ -118,11 +150,11 @@ export default function HomePage() {
   const nextExerciseIndex = exercises.findIndex((e) => !e.completed);
 
   return (
-    <AppShell streakCount={userData.streak.currentStreak}>
+    <>
       <div className="page" style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
 
         {/* ── Daily Progress Hero Card ── */}
-        <section
+        {totalCount > 0 && <section
           className="card animate-in"
           style={{
             display: "flex",
@@ -203,7 +235,7 @@ export default function HomePage() {
               zIndex: 0,
             }}
           />
-        </section>
+        </section>}
 
         {/* ── Today's Plan Section ── */}
         <section>
@@ -451,6 +483,164 @@ export default function HomePage() {
             )}
           </div>
         </section>
+
+        {/* ── Streak & Progress Section ── */}
+        {streakData && (
+          <section>
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Your Progress</h3>
+
+            {/* Stats Row */}
+            <div className="row" style={{ gap: "var(--space-md)", marginBottom: "var(--space-lg)" }}>
+              <div className="card animate-in" style={{ flex: 1, textAlign: "center", animationDelay: "300ms" }}>
+                <Flame size={24} color={streakData.currentStreak > 0 ? "var(--color-orange)" : "var(--color-gray-300)"} fill={streakData.currentStreak > 0 ? "var(--color-orange)" : "none"} />
+                <div style={{ marginTop: "4px", fontSize: "24px", fontWeight: 800 }}>
+                  {streakData.currentStreak}
+                </div>
+                <div className="text-small">Current</div>
+              </div>
+              <div className="card animate-in" style={{ flex: 1, textAlign: "center", animationDelay: "360ms" }}>
+                <Award size={24} color="var(--color-primary)" />
+                <div style={{ marginTop: "4px", fontSize: "24px", fontWeight: 800 }}>
+                  {streakData.longestStreak}
+                </div>
+                <div className="text-small">Longest</div>
+              </div>
+              <div className="card animate-in" style={{ flex: 1, textAlign: "center", animationDelay: "420ms" }}>
+                <TrendingUp size={24} color="var(--color-blue)" />
+                <div style={{ marginTop: "4px", fontSize: "24px", fontWeight: 800 }}>
+                  {streakData.history.length}
+                </div>
+                <div className="text-small">Total Days</div>
+              </div>
+            </div>
+
+            {/* 30-Day Calendar */}
+            <div className="animate-in" style={{ animationDelay: "480ms" }}>
+              <h4 style={{ marginBottom: "var(--space-md)", fontWeight: 700 }}>Last 30 Days</h4>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7, 1fr)",
+                  gap: "6px",
+                }}
+              >
+                {(() => {
+                  const today = new Date();
+                  const days: { date: string; completed: boolean }[] = [];
+                  for (let i = 29; i >= 0; i--) {
+                    const d = new Date(today);
+                    d.setDate(d.getDate() - i);
+                    const dateStr = d.toISOString().split("T")[0];
+                    days.push({ date: dateStr, completed: streakData.history.includes(dateStr) });
+                  }
+                  return days.map(({ date, completed }) => (
+                    <div
+                      key={date}
+                      title={date}
+                      style={{
+                        aspectRatio: "1",
+                        borderRadius: "var(--radius-sm)",
+                        backgroundColor: completed
+                          ? "var(--color-green)"
+                          : "var(--color-gray-100)",
+                        transition: "background-color 0.2s ease",
+                      }}
+                    />
+                  ));
+                })()}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ── Messages Section ── */}
+        <section>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Messages</h3>
+          </div>
+
+          {conversations.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+              {conversations.map((c) => (
+                <Link
+                  key={c.partnerId}
+                  href="/messages"
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
+                  <div
+                    className="card-interactive animate-in"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--space-md)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: "var(--radius-full)",
+                        backgroundColor: "var(--color-blue-light)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <User size={22} color="var(--color-blue)" />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 700 }}>{c.partnerName}</span>
+                        {c.unreadCount > 0 && (
+                          <span
+                            style={{
+                              backgroundColor: "var(--color-primary)",
+                              color: "white",
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              borderRadius: "var(--radius-full)",
+                              minWidth: 22,
+                              height: 22,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: "0 6px",
+                            }}
+                          >
+                            {c.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "var(--text-small)",
+                          color: "var(--color-gray-400)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          marginTop: 2,
+                        }}
+                      >
+                        {c.lastMessage
+                          ? c.lastMessage.content
+                          : "No messages yet — tap to start"}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
+              <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
+              <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
+              <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>
+                Your therapist will appear here once they invite you.
+              </p>
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Fixed CTA */}
@@ -471,6 +661,6 @@ export default function HomePage() {
           </button>
         </div>
       )}
-    </AppShell>
+    </>
   );
 }

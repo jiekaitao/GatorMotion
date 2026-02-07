@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AppShell from "@/components/AppShell";
+
 import { User, Shield } from "lucide-react";
 
 interface UserInfo {
@@ -23,7 +23,7 @@ export default function DevUsersPage() {
   }, []);
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Users</h1>
         <h3 className="animate-in" style={{ marginBottom: "var(--space-md)" }}>
@@ -82,6 +82,6 @@ export default function DevUsersPage() {
         )}
       </div>
 
-    </AppShell>
+    </>
   );
 }

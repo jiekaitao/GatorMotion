@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import AppShell from "@/components/AppShell";
+
 import { User, Lock, Check, LogOut } from "lucide-react";
 
 export default function SettingsPage() {
@@ -109,7 +109,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page" style={{ maxWidth: 560 }}>
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Settings</h1>
 
@@ -253,6 +253,6 @@ export default function SettingsPage() {
           Log Out
         </button>
       </div>
-    </AppShell>
+    </>
   );
 }

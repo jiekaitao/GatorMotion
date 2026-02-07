@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import AppShell from "@/components/AppShell";
+
 import StreakFlame from "@/components/StreakFlame";
 
 interface StreakInfo {
@@ -61,7 +61,7 @@ export default function DevStreaksPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Streaks</h1>
         {/* Current user streak */}
@@ -165,6 +165,6 @@ export default function DevStreaksPage() {
         </div>
       </div>
 
-    </AppShell>
+    </>
   );
 }

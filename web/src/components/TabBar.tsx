@@ -3,20 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, TrendingUp, MessageCircle, User, Wrench, Users } from "lucide-react";
+import { Home, Wrench, Users, Settings } from "lucide-react";
 
 const patientTabs = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/progress", label: "Progress", icon: TrendingUp },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
-  { href: "/profile", label: "Profile", icon: User },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 const therapistTabs = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/therapist/patients", label: "Patients", icon: Users },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
-  { href: "/profile", label: "Profile", icon: User },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function TabBar() {

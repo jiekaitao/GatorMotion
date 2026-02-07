@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import AppShell from "@/components/AppShell";
+
 import { LogOut, User } from "lucide-react";
 
 interface UserInfo {
@@ -47,7 +47,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Profile</h1>
 
@@ -82,6 +82,6 @@ export default function ProfilePage() {
           Log out
         </button>
       </div>
-    </AppShell>
+    </>
   );
 }

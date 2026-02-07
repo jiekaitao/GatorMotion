@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, FormEvent, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import AppShell from "@/components/AppShell";
+
 import { Send, ArrowLeft, MessageCircle, User } from "lucide-react";
 
 interface Conversation {
@@ -120,7 +120,7 @@ export default function MessagesPage() {
   // Chat view
   if (activeChat) {
     return (
-      <AppShell hideDesktopHeader>
+      <>
         <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 60px)", maxHeight: "calc(100vh - 60px)" }}>
           {/* Chat Header */}
           <div
@@ -247,13 +247,13 @@ export default function MessagesPage() {
             </button>
           </form>
         </div>
-      </AppShell>
+      </>
     );
   }
 
   // Conversation List (therapist or patient with multiple contacts)
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Messages</h1>
 
@@ -339,6 +339,6 @@ export default function MessagesPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

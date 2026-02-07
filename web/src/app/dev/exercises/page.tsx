@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, FormEvent } from "react";
-import AppShell from "@/components/AppShell";
+
 import { Trash2 } from "lucide-react";
 
 interface Exercise {
@@ -63,7 +63,7 @@ export default function DevExercisesPage() {
   }
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Exercises</h1>
         {/* Create Form */}
@@ -136,6 +136,6 @@ export default function DevExercisesPage() {
         </div>
       </div>
 
-    </AppShell>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import AppShell from "@/components/AppShell";
+
 import { UserPlus, Copy, X, Check, Mail, Flame, Clock } from "lucide-react";
 
 interface Patient {
@@ -119,7 +119,7 @@ export default function TherapistPatientsPage() {
   const pastInvites = invites.filter((i) => i.status !== "pending");
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>My Patients</h1>
         {/* Invite Form */}
@@ -251,6 +251,6 @@ export default function TherapistPatientsPage() {
         )}
       </div>
 
-    </AppShell>
+    </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import AppShell from "@/components/AppShell";
+
 import { Database, Flame, Dumbbell, Users, ClipboardList, Mail } from "lucide-react";
 
 interface Stats {
@@ -29,7 +29,7 @@ export default function DevDashboard() {
   ];
 
   return (
-    <AppShell>
+    <>
       <div className="page">
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Dev Panel</h1>
         <div className="badge badge-orange animate-in" style={{ marginBottom: "var(--space-lg)" }}>
@@ -78,6 +78,6 @@ export default function DevDashboard() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }
