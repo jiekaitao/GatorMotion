@@ -9,7 +9,9 @@ Runs selected detectors in parallel threads for maximum throughput.
 import asyncio
 import base64
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import cv2
 import mediapipe as mp
@@ -17,6 +19,9 @@ import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from rep_counter import RepCounter, PainDetector, SixSevenDetector
+from coach_engine import CoachV2Engine
+from train_reference import ensure_models_exist
+from pt_coach.common import landmarks_list_to_np
 
 from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python.vision import (
@@ -35,6 +40,11 @@ MODELS_DIR = os.path.join(SCRIPT_DIR, "models")
 POSE_MODEL = os.path.join(MODELS_DIR, "pose_landmarker_heavy.task")
 HAND_MODEL = os.path.join(MODELS_DIR, "hand_landmarker.task")
 FACE_MODEL = os.path.join(MODELS_DIR, "face_landmarker.task")
+
+SKELETON_DATA_DIR = Path(__file__).parent.parent / "web" / "public" / "skeleton_data"
+COACH_MODELS_DIR = Path(__file__).parent / "models"
+
+coach_model_paths: dict[str, Path] = {}
 
 POSE_LABELS = {
     0: "nose",
@@ -60,7 +70,7 @@ face_landmarker: FaceLandmarker | None = None
 
 @app.on_event("startup")
 def load_models():
-    global pose_landmarker, hand_landmarker, face_landmarker
+    global pose_landmarker, hand_landmarker, face_landmarker, coach_model_paths
 
     pose_landmarker = PoseLandmarker.create_from_options(
         PoseLandmarkerOptions(
@@ -90,6 +100,8 @@ def load_models():
             output_facial_transformation_matrixes=False,
         )
     )
+
+    coach_model_paths = ensure_models_exist(SKELETON_DATA_DIR, COACH_MODELS_DIR)
 
 
 @app.on_event("shutdown")
@@ -236,6 +248,10 @@ async def ws_exercise(websocket: WebSocket):
     pain_detector = PainDetector()
     six_seven_detector = SixSevenDetector()
 
+    coach_engine: CoachV2Engine | None = None
+    if exercise_key in coach_model_paths:
+        coach_engine = CoachV2Engine(coach_model_paths[exercise_key])
+
     await websocket.accept()
     try:
         while True:
@@ -317,11 +333,18 @@ async def ws_exercise(websocket: WebSocket):
             if tracking["pose"] and len(tracking["pose"]) > 0:
                 six_seven_status = six_seven_detector.update(lm_objects, w, h)
 
+            # Coaching engine inference
+            coaching_data = None
+            if coach_engine and tracking["pose"] and len(tracking["pose"]) > 0:
+                pose_landmarks_np = landmarks_list_to_np(tracking["pose"][0])
+                coaching_data = coach_engine.infer(pose_landmarks_np, time.time())
+
             response = {
                 **tracking,
                 "exercise": exercise_status,
                 "pain": pain_status,
                 "six_seven": six_seven_status,
+                "coaching": coaching_data,
             }
             await websocket.send_json(response)
     except WebSocketDisconnect:

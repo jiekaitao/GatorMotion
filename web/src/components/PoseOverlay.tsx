@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { LandmarkFrame, PoseLandmark } from "@/hooks/useExerciseWebSocket";
+import type { LandmarkFrame, PoseLandmark, CoachingData } from "@/hooks/useExerciseWebSocket";
 
 const POSE_CONNECTIONS: [number, number][] = [
   [11, 13], [13, 15], // Left arm
@@ -22,6 +22,34 @@ const VISIBILITY_THRESHOLD = 0.3;
 const DOT_COLOR = "rgba(2, 202, 202, 0.9)";       // --color-primary with alpha
 const DOT_GLOW = "rgba(2, 202, 202, 0.35)";
 const LINE_COLOR = "rgba(2, 202, 202, 0.45)";
+
+// Coaching arrow colors
+const ARROW_COLOR = "rgba(255, 150, 0, 0.85)";
+const ARROW_GLOW = "rgba(255, 150, 0, 0.3)";
+
+// Map body part names to landmark indices for arrow drawing
+const PART_TO_INDEX: Record<string, number> = {
+  shoulder: 11,
+  elbow: 13,
+  wrist: 15,
+  hip: 23,
+  knee: 25,
+  ankle: 27,
+  foot: 31,
+};
+
+const SIDE_OFFSET: Record<string, number> = {
+  left: 0,
+  right: 1,
+};
+
+function partSideToIndex(part: string, side: string): number | null {
+  const base = PART_TO_INDEX[part];
+  if (base === undefined) return null;
+  const offset = SIDE_OFFSET[side];
+  if (offset === undefined) return base;
+  return base + offset;
+}
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -48,12 +76,66 @@ function lerpLandmarks(
   return out;
 }
 
+function drawArrow(
+  ctx: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  dx: number,
+  dy: number,
+  dpr: number,
+) {
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 2) return;
+
+  const arrowLen = Math.min(len, 40 * dpr);
+  const nx = dx / len;
+  const ny = dy / len;
+  const toX = fromX + nx * arrowLen;
+  const toY = fromY + ny * arrowLen;
+
+  const headLen = 8 * dpr;
+  const headAngle = Math.PI / 6;
+  const angle = Math.atan2(ny, nx);
+
+  // Glow
+  ctx.save();
+  ctx.shadowColor = ARROW_GLOW;
+  ctx.shadowBlur = 8 * dpr;
+
+  ctx.strokeStyle = ARROW_COLOR;
+  ctx.lineWidth = 2.5 * dpr;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  // Arrowhead
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(
+    toX - headLen * Math.cos(angle - headAngle),
+    toY - headLen * Math.sin(angle - headAngle),
+  );
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(
+    toX - headLen * Math.cos(angle + headAngle),
+    toY - headLen * Math.sin(angle + headAngle),
+  );
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 interface PoseOverlayProps {
   landmarksRef: React.RefObject<LandmarkFrame>;
+  coachingRef?: React.RefObject<CoachingData | null>;
   active: boolean;
 }
 
-export default function PoseOverlay({ landmarksRef, active }: PoseOverlayProps) {
+export default function PoseOverlay({ landmarksRef, coachingRef, active }: PoseOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
 
@@ -141,12 +223,36 @@ export default function PoseOverlay({ landmarksRef, active }: PoseOverlayProps) 
         ctx.fill();
       }
 
+      // Draw coaching correction arrows
+      if (coachingRef?.current) {
+        const coaching = coachingRef.current;
+        for (const div of coaching.divergences) {
+          if (div.distance < 0.04) continue; // Below threshold
+
+          const idx = partSideToIndex(div.part, div.side);
+          if (idx === null || idx >= landmarks.length) continue;
+          const lm = landmarks[idx];
+          if ((lm.visibility ?? 1) < VISIBILITY_THRESHOLD) continue;
+
+          const px = lm.x * w;
+          const py = lm.y * h;
+
+          // Scale divergence into pixel space.
+          // Body-frame divergence ~0.04-0.4 maps to ~15-60px arrows.
+          const scale = w * 0.6;
+          const dx = -div.delta_x * scale; // Negate X because canvas is mirrored
+          const dy = div.delta_y * scale;
+
+          drawArrow(ctx, px, py, dx, dy, dpr);
+        }
+      }
+
       rafRef.current = requestAnimationFrame(draw);
     }
 
     rafRef.current = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [active, landmarksRef]);
+  }, [active, landmarksRef, coachingRef]);
 
   return (
     <canvas

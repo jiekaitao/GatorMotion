@@ -604,6 +604,8 @@ export interface DbExerciseSession {
   repTimestamps: number[];
   painEvents: { timeMs: number; level: string }[];
   formDistribution: { good: number; warning: number; neutral: number };
+  rmsHistory?: { timeSec: number; rms: number }[];
+  coachingInterventions?: { timeSec: number; text: string }[];
   createdAt: Date;
 }
 

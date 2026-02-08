@@ -25,6 +25,8 @@ export async function POST(req: NextRequest) {
     repTimestamps,
     painEvents,
     formDistribution,
+    rmsHistory,
+    coachingInterventions,
   } = body;
 
   if (!assignmentId || !exerciseId) {
@@ -44,6 +46,8 @@ export async function POST(req: NextRequest) {
     repTimestamps: repTimestamps || [],
     painEvents: painEvents || [],
     formDistribution: formDistribution || { good: 0, warning: 0, neutral: 0 },
+    rmsHistory: rmsHistory || undefined,
+    coachingInterventions: coachingInterventions || undefined,
   });
 
   return NextResponse.json({ sessionId: id.toString() });

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, Wrench, Users, Settings, MessageCircle } from "lucide-react";
+import { Home, Wrench, Settings, MessageCircle } from "lucide-react";
 
 const patientTabs = [
   { href: "/home", label: "Home", icon: Home },
@@ -13,7 +13,6 @@ const patientTabs = [
 
 const therapistTabs = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/therapist/patients", label: "Patients", icon: Users },
   { href: "/messages", label: "Messages", icon: MessageCircle },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

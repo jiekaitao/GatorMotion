@@ -13,8 +13,19 @@ import {
   Cell,
   ResponsiveContainer,
   ReferenceDot,
+  ReferenceLine,
 } from "recharts";
-import { Clock, Repeat, Zap, AlertTriangle } from "lucide-react";
+import { Clock, Repeat, Zap, AlertTriangle, Activity } from "lucide-react";
+
+interface RmsHistoryEntry {
+  timeSec: number;
+  rms: number;
+}
+
+interface CoachingIntervention {
+  timeSec: number;
+  text: string;
+}
 
 interface SessionData {
   completedReps: number;
@@ -22,6 +33,8 @@ interface SessionData {
   repTimestamps: number[];
   painEvents: { timeMs: number; level: string }[];
   formDistribution: { good: number; warning: number; neutral: number };
+  rmsHistory?: RmsHistoryEntry[];
+  coachingInterventions?: CoachingIntervention[];
 }
 
 interface ExerciseReportProps {
@@ -71,7 +84,7 @@ export default function ExerciseReport({ sessionId }: ExerciseReportProps) {
   const durationRemSec = durationSec % 60;
   const avgRepSpeed = data.repTimestamps.length > 1
     ? ((data.repTimestamps[data.repTimestamps.length - 1] - data.repTimestamps[0]) / 1000 / (data.repTimestamps.length - 1)).toFixed(1)
-    : "—";
+    : "\u2014";
 
   // Build cumulative rep timeline data
   const timelineData = [{ sec: 0, reps: 0 }];
@@ -97,6 +110,10 @@ export default function ExerciseReport({ sessionId }: ExerciseReportProps) {
   ].filter((d) => d.value > 0);
 
   const totalSamples = formData.reduce((s, d) => s + d.value, 0);
+
+  // RMS history for Form Quality Over Time chart
+  const rmsHistory = data.rmsHistory || [];
+  const coachingInterventions = data.coachingInterventions || [];
 
   return (
     <div className="report-container">
@@ -179,6 +196,78 @@ export default function ExerciseReport({ sessionId }: ExerciseReportProps) {
               })}
             </AreaChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Form Quality Over Time (RMS Divergence) */}
+      {rmsHistory.length > 2 && (
+        <div className="report-chart-card">
+          <h4 style={{ fontSize: "14px", fontWeight: 700, color: "var(--color-gray-500)", marginBottom: "var(--space-md)", display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+            <Activity size={16} color={COLORS.primary} />
+            Form Quality Over Time
+          </h4>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={rmsHistory}>
+              <defs>
+                <linearGradient id="rmsGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS.warning} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={COLORS.good} stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+              <XAxis
+                dataKey="timeSec"
+                tickFormatter={(v) => `${Math.round(v)}s`}
+                fontSize={11}
+              />
+              <YAxis
+                fontSize={11}
+                domain={[0, "auto"]}
+                tickFormatter={(v) => v.toFixed(2)}
+              />
+              <Tooltip
+                formatter={(value) => [Number(value).toFixed(4), "RMS Divergence"]}
+                labelFormatter={(label) => `${Math.round(Number(label))}s`}
+              />
+              <Area
+                type="monotone"
+                dataKey="rms"
+                stroke={COLORS.primary}
+                strokeWidth={2}
+                fill="url(#rmsGrad)"
+              />
+              {/* Coaching threshold line */}
+              <ReferenceLine
+                y={0.04}
+                stroke={COLORS.good}
+                strokeDasharray="4 4"
+                strokeWidth={1}
+                label={{ value: "Good", position: "right", fontSize: 10, fill: COLORS.good }}
+              />
+              {/* Coaching intervention markers */}
+              {coachingInterventions.map((ci, i) => {
+                const closest = rmsHistory.reduce((prev, curr) =>
+                  Math.abs(curr.timeSec - ci.timeSec) < Math.abs(prev.timeSec - ci.timeSec) ? curr : prev
+                );
+                return (
+                  <ReferenceDot
+                    key={`ci-${i}`}
+                    x={closest.timeSec}
+                    y={closest.rms}
+                    r={4}
+                    fill={COLORS.warning}
+                    stroke="white"
+                    strokeWidth={1.5}
+                  />
+                );
+              })}
+            </AreaChart>
+          </ResponsiveContainer>
+          {coachingInterventions.length > 0 && (
+            <div style={{ marginTop: "var(--space-sm)", fontSize: "12px", color: "var(--color-gray-300)" }}>
+              <span style={{ color: COLORS.warning, fontWeight: 600 }}>{coachingInterventions.length}</span> coaching corrections during session
+            </div>
+          )}
         </div>
       )}
 

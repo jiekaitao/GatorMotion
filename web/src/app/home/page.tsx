@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -17,6 +17,9 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
+  Clock,
+  X,
+  Trash2,
 } from "lucide-react";
 
 interface Exercise {
@@ -87,6 +90,11 @@ export default function HomePage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inviteUsername, setInviteUsername] = useState("");
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState("");
+  const [showInviteHistory, setShowInviteHistory] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -172,6 +180,47 @@ export default function HomePage() {
     setShowPast((v) => !v);
   };
 
+  async function handleSendInvite(e: FormEvent) {
+    e.preventDefault();
+    setInviteError("");
+    setInviteSuccess("");
+    setInviteSending(true);
+    try {
+      const res = await fetch("/api/invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: inviteUsername.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setInviteError(data.error || "Failed to send invite");
+      } else {
+        setInviteUsername("");
+        setInviteSuccess("Invite sent!");
+        setTimeout(() => setInviteSuccess(""), 4000);
+        fetchData();
+      }
+    } catch {
+      setInviteError("Something went wrong");
+    } finally {
+      setInviteSending(false);
+    }
+  }
+
+  async function handleRevokeInvite(inviteId: string) {
+    await fetch(`/api/invites/${inviteId}`, { method: "DELETE" });
+    setInvites((prev) => prev.map((inv) => inv._id === inviteId ? { ...inv, status: "revoked" } : inv));
+  }
+
+  async function handleRemovePatient(patientId: string) {
+    try {
+      const res = await fetch(`/api/relationships/${patientId}`, { method: "DELETE" });
+      if (res.ok) {
+        setPatients((prev) => prev.filter((p) => p._id !== patientId));
+      }
+    } catch { /* ignore */ }
+  }
+
   if (loading || !userData) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--color-gray-300)" }}>
@@ -216,47 +265,249 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="home-grid">
-            {/* Messages Column */}
-            <section className="animate-in" style={{ animationDelay: "180ms" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
-                <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Messages</h3>
+          {/* Invite a Patient */}
+          <div className="card animate-in" style={{ animationDelay: "120ms", marginBottom: "var(--space-lg)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-md)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                <UserPlus size={20} color="var(--color-blue)" />
+                <h3 style={{ fontWeight: 700 }}>Invite a Patient</h3>
               </div>
-              {conversations.length > 0 ? (
-                <div className="stack stack-sm">
-                  {conversations.slice(0, 5).map((c) => (
-                    <Link key={c.partnerId} href={`/messages/${c.partnerId}?name=${encodeURIComponent(c.partnerName)}`} style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}>
-                      <div className="card-interactive" style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", overflow: "hidden" }}>
+              {invites.filter((i) => i.status !== "pending").length > 0 && (
+                <button
+                  onClick={() => setShowInviteHistory(true)}
+                  style={{ background: "none", border: "none", color: "var(--color-blue)", fontSize: "13px", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                >
+                  History
+                </button>
+              )}
+            </div>
+            <form onSubmit={handleSendInvite} style={{ display: "flex", gap: "var(--space-sm)" }}>
+              <input
+                type="text"
+                className="input"
+                placeholder="patient username"
+                value={inviteUsername}
+                onChange={(e) => setInviteUsername(e.target.value)}
+                required
+                style={{ flex: 1 }}
+              />
+              <button type="submit" className="btn btn-blue" disabled={inviteSending}>
+                {inviteSending ? "..." : "Send"}
+              </button>
+            </form>
+            {inviteError && (
+              <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)" }}>{inviteError}</p>
+            )}
+            {inviteSuccess && (
+              <p style={{ color: "var(--color-green-dark)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)", backgroundColor: "var(--color-green-surface)", padding: "8px 12px", borderRadius: "var(--radius-sm)" }}>{inviteSuccess}</p>
+            )}
+          </div>
+
+          {/* Pending Invites */}
+          {pendingInvites.length > 0 && (
+            <div className="animate-in" style={{ animationDelay: "150ms", marginBottom: "var(--space-lg)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: "var(--space-sm)" }}>
+                <Clock size={14} color="var(--color-gray-300)" />
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--color-gray-400)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Pending Invites ({pendingInvites.length})
+                </span>
+              </div>
+              <div className="stack stack-sm">
+                {pendingInvites.map((inv) => (
+                  <div key={inv._id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-sm) var(--space-md)" }}>
+                    <span style={{ fontWeight: 600, fontSize: "14px" }}>{inv.patientUsername}</span>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: "4px 8px", fontSize: "12px", color: "var(--color-red)" }}
+                      onClick={() => handleRevokeInvite(inv._id)}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Patient Cards */}
+          <section className="animate-in" style={{ animationDelay: "180ms", marginBottom: "var(--space-xl)" }}>
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>
+              Patients ({patients.length})
+            </h3>
+            {patients.length > 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "var(--space-md)" }}>
+                {patients.map((p) => {
+                  const convo = conversations.find((c) => c.partnerId === p._id);
+                  return (
+                    <div
+                      key={p._id}
+                      className="card-interactive"
+                      style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", position: "relative" }}
+                      onClick={() => router.push(`/therapist/patients/${p._id}`)}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
                         <div style={{ width: 40, height: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <User size={20} color="var(--color-blue)" />
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontWeight: 700, fontSize: "var(--text-small)" }}>{c.partnerName}</span>
-                            {c.unreadCount > 0 && (
-                              <span style={{ backgroundColor: "var(--color-primary)", color: "white", fontSize: "11px", fontWeight: 700, borderRadius: "var(--radius-full)", minWidth: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
-                                {c.unreadCount}
-                              </span>
-                            )}
+                          <div style={{ fontWeight: 700, fontSize: "15px" }}>{p.name}</div>
+                          <div style={{ fontSize: "12px", color: "var(--color-gray-300)" }}>@{p.username}</div>
+                        </div>
+                        {p.streak && p.streak.currentStreak > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                            <Flame size={14} color="var(--color-orange)" fill="var(--color-orange)" />
+                            <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--color-orange)" }}>{p.streak.currentStreak}</span>
                           </div>
-                          <div style={{ fontSize: "var(--text-small)", color: "var(--color-gray-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                            {c.lastMessage ? c.lastMessage.content : "No messages yet"}
-                          </div>
+                        )}
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: "4px 6px", position: "absolute", top: 8, right: 8 }}
+                          onClick={(e) => { e.stopPropagation(); handleRemovePatient(p._id); }}
+                          title="Remove patient"
+                        >
+                          <Trash2 size={12} color="var(--color-gray-300)" />
+                        </button>
+                      </div>
+
+                      {/* Floating message bubble */}
+                      {convo && convo.lastMessage && (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/messages/${p._id}?name=${encodeURIComponent(p.name)}`);
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "var(--space-sm)",
+                            padding: "6px 10px",
+                            borderRadius: "var(--radius-md)",
+                            backgroundColor: convo.unreadCount > 0 ? "var(--color-primary-surface)" : "var(--color-snow)",
+                            border: convo.unreadCount > 0 ? "1px solid var(--color-primary)" : "1px solid var(--color-gray-100)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <MessageCircle size={13} color={convo.unreadCount > 0 ? "var(--color-primary)" : "var(--color-gray-300)"} />
+                          <span style={{
+                            flex: 1,
+                            fontSize: "12px",
+                            color: convo.unreadCount > 0 ? "var(--color-gray-600)" : "var(--color-gray-400)",
+                            fontWeight: convo.unreadCount > 0 ? 600 : 400,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}>
+                            {convo.lastMessage.content}
+                          </span>
+                          {convo.unreadCount > 0 && (
+                            <span style={{
+                              backgroundColor: "var(--color-primary)",
+                              color: "white",
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              borderRadius: "var(--radius-full)",
+                              minWidth: 16,
+                              height: 16,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: "0 4px",
+                              flexShrink: 0,
+                            }}>
+                              {convo.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
+                <Users size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
+                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No patients yet</p>
+                <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>Send an invite above to get started.</p>
+              </div>
+            )}
+          </section>
+
+          {/* Messages */}
+          <section className="animate-in" style={{ animationDelay: "240ms" }}>
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Messages</h3>
+            {conversations.length > 0 ? (
+              <div className="stack stack-sm">
+                {conversations.slice(0, 5).map((c) => (
+                  <Link key={c.partnerId} href={`/messages/${c.partnerId}?name=${encodeURIComponent(c.partnerName)}`} style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}>
+                    <div className="card-interactive" style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", overflow: "hidden" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <User size={20} color="var(--color-blue)" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 700, fontSize: "var(--text-small)" }}>{c.partnerName}</span>
+                          {c.unreadCount > 0 && (
+                            <span style={{ backgroundColor: "var(--color-primary)", color: "white", fontSize: "11px", fontWeight: 700, borderRadius: "var(--radius-full)", minWidth: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+                              {c.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "var(--text-small)", color: "var(--color-gray-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
+                          {c.lastMessage ? c.lastMessage.content : "No messages yet"}
                         </div>
                       </div>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
-                  <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
-                  <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
-                  <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>Messages with your patients will appear here.</p>
-                </div>
-              )}
-            </section>
-          </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
+                <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
+                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
+                <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>Messages with your patients will appear here.</p>
+              </div>
+            )}
+          </section>
         </div>
+
+        {/* Invite History Modal */}
+        {showInviteHistory && (
+          <div
+            onClick={() => setShowInviteHistory(false)}
+            style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "var(--space-md)" }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "var(--color-surface)", borderRadius: "var(--radius-lg)", width: "100%", maxWidth: 480, maxHeight: "70vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-md) var(--space-lg)" }}>
+                <h3 style={{ fontWeight: 700 }}>Invite History</h3>
+                <button onClick={() => setShowInviteHistory(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-gray-400)", padding: 4 }}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div style={{ overflowY: "auto", padding: "0 var(--space-lg) var(--space-lg)" }}>
+                {invites.filter((i) => i.status !== "pending").length > 0 ? (
+                  <div className="stack stack-sm">
+                    {invites.filter((i) => i.status !== "pending").map((inv) => (
+                      <div key={inv._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--color-gray-100)" }}>
+                        <span style={{ fontWeight: 600, fontSize: "14px" }}>{inv.patientUsername}</span>
+                        <span className="badge" style={{
+                          backgroundColor: inv.status === "accepted" ? "var(--color-primary-light)" : "var(--color-gray-100)",
+                          color: inv.status === "accepted" ? "var(--color-primary-dark)" : "var(--color-gray-400)",
+                        }}>
+                          {inv.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: "var(--color-gray-300)", textAlign: "center", padding: "var(--space-lg) 0" }}>No past invites.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </>
     );
   }

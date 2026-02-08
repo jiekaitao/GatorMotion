@@ -28,19 +28,26 @@ export interface PoseLandmark {
   visibility?: number;
 }
 
-export interface CoachingDivergence {
-  joint: string;
+export interface DivergenceEntry {
+  side: string;
+  part: string;
+  delta_x: number;
+  delta_y: number;
   distance: number;
-}
-
-export interface CoachingData {
-  divergences: CoachingDivergence[];
 }
 
 export interface CoachingMessage {
   type: string;
   text: string;
 }
+
+export interface CoachingData {
+  rms_divergence: number;
+  quality: number;
+  divergences: DivergenceEntry[];
+  coaching_messages: CoachingMessage[];
+}
+
 export interface LandmarkFrame {
   prev: PoseLandmark[] | null;
   current: PoseLandmark[] | null;
@@ -61,6 +68,9 @@ interface UseExerciseWebSocketResult {
   repState: string;
   sixSevenTriggered: boolean;
   landmarksRef: React.RefObject<LandmarkFrame>;
+  coachingRef: React.RefObject<CoachingData | null>;
+  rmsDiv: number;
+  coachingMessages: CoachingMessage[];
   startCapture: (videoElement: HTMLVideoElement) => void;
   stopCapture: () => void;
 }
@@ -83,6 +93,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [angle, setAngle] = useState(0);
   const [repState, setRepState] = useState("waiting");
   const [sixSevenTriggered, setSixSevenTriggered] = useState(false);
+  const [rmsDiv, setRmsDiv] = useState(0);
+  const [coachingMessages, setCoachingMessages] = useState<CoachingMessage[]>([]);
 
   // Backend rep counter resets when websocket reconnects.
   // Keep a cumulative offset so UI progress is monotonic.
@@ -97,6 +109,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     prevTime: 0,
     currentTime: 0,
   });
+  const coachingRef = useRef<CoachingData | null>(null);
 
   // Send a single frame
   const sendFrame = useCallback(() => {
@@ -135,6 +148,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
       setMar(0);
       setAngle(0);
       setRepState("waiting");
+      setRmsDiv(0);
+      setCoachingMessages([]);
       cumulativeRepOffsetRef.current = 0;
       lastRawRepCountRef.current = 0;
       lastUiUpdateRef.current = 0;
@@ -146,6 +161,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
         prevTime: 0,
         currentTime: 0,
       };
+      coachingRef.current = null;
       return;
     }
 
@@ -163,12 +179,15 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     setMar(0);
     setAngle(0);
     setRepState("waiting");
+    setRmsDiv(0);
+    setCoachingMessages([]);
     landmarksRef.current = {
       prev: null,
       current: null,
       prevTime: 0,
       currentTime: 0,
     };
+    coachingRef.current = null;
 
     const isSecure = window.location.protocol === "https:";
     const protocol = isSecure ? "wss:" : "ws:";
@@ -231,6 +250,11 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
             };
           }
 
+          // Update coaching ref every frame (no re-render for canvas arrows)
+          if (data.coaching) {
+            coachingRef.current = data.coaching as CoachingData;
+          }
+
           // 6-7 Easter egg — check every frame (rare event)
           if (data.six_seven?.triggered) {
             setSixSevenTriggered(true);
@@ -264,6 +288,14 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
               setFaceDetected(hasFace || recentlyDetected);
               setEar(pain.ear ?? 0);
               setMar(pain.mar ?? 0);
+            }
+            // Coaching state (throttled)
+            if (data.coaching) {
+              const c = data.coaching as CoachingData;
+              setRmsDiv(c.rms_divergence);
+              if (c.coaching_messages.length > 0) {
+                setCoachingMessages((prev) => [...prev, ...c.coaching_messages]);
+              }
             }
             lastUiUpdateRef.current = uiNow;
           }
@@ -342,6 +374,9 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     repState,
     sixSevenTriggered,
     landmarksRef,
+    coachingRef,
+    rmsDiv,
+    coachingMessages,
     startCapture,
     stopCapture,
   };

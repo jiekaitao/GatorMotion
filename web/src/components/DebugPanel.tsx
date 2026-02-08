@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { Bug } from "lucide-react";
 
+interface RmsHistoryEntry {
+  timeSec: number;
+  rms: number;
+}
+
 interface DebugPanelProps {
   painLevel: string;
   ear: number;
@@ -12,6 +17,9 @@ interface DebugPanelProps {
   angle: number;
   formQuality: string;
   wsConnected: boolean;
+  rmsDiv?: number;
+  rmsHistory?: RmsHistoryEntry[];
+  coachingMessageCount?: number;
 }
 
 const PAIN_COLORS: Record<string, string> = {
@@ -19,6 +27,29 @@ const PAIN_COLORS: Record<string, string> = {
   warning: "#FF9600",
   stop: "#EA2B2B",
 };
+
+function RmsSparkline({ data }: { data: RmsHistoryEntry[] }) {
+  if (data.length < 2) return null;
+  const w = 120;
+  const h = 32;
+  const maxRms = Math.max(0.15, ...data.map((d) => d.rms));
+  const points = data.map((d, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - (d.rms / maxRms) * h;
+    return `${x},${y}`;
+  });
+  return (
+    <svg width={w} height={h} style={{ display: "block" }}>
+      <polyline
+        points={points.join(" ")}
+        fill="none"
+        stroke="#02caca"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 export default function DebugPanel({
   painLevel,
@@ -29,6 +60,9 @@ export default function DebugPanel({
   angle,
   formQuality,
   wsConnected,
+  rmsDiv = 0,
+  rmsHistory = [],
+  coachingMessageCount = 0,
 }: DebugPanelProps) {
   const [open, setOpen] = useState(false);
 
@@ -93,6 +127,33 @@ export default function DebugPanel({
           <Row label="Reps">
             <span style={{ fontWeight: 700 }}>{repCount}</span>
           </Row>
+
+          {/* Coaching / RMS section */}
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", marginTop: 6, paddingTop: 6 }}>
+            <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#999", marginBottom: 6 }}>
+              Coaching
+            </div>
+
+            <Row label="RMS Div">
+              <span style={{
+                fontWeight: 700,
+                color: rmsDiv < 0.04 ? "#58CC02" : rmsDiv < 0.1 ? "#FF9600" : "#EA2B2B",
+              }}>
+                {rmsDiv.toFixed(4)}
+              </span>
+            </Row>
+
+            <Row label="Coach Msgs">
+              <span style={{ fontWeight: 700 }}>{coachingMessageCount}</span>
+            </Row>
+
+            {rmsHistory.length > 1 && (
+              <div style={{ marginTop: 6 }}>
+                <span style={{ color: "#888", fontSize: "10px" }}>RMS Over Time</span>
+                <RmsSparkline data={rmsHistory} />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </>

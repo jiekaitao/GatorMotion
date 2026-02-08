@@ -2,8 +2,20 @@
 
 import { useEffect, useState, useRef, useCallback, use, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Check, Calendar, Dumbbell, Minus, Plus, Send, MessageCircle } from "lucide-react";
+import {
+  ChevronLeft,
+  Check,
+  Calendar,
+  Dumbbell,
+  Minus,
+  Plus,
+  Send,
+  MessageCircle,
+  ClipboardList,
+  BarChart3,
+} from "lucide-react";
 import SkeletonViewer from "@/components/SkeletonViewer";
+import PatientReportsTab from "@/components/PatientReportsTab";
 import { showToast } from "@/components/Toast";
 
 interface Exercise {
@@ -49,6 +61,26 @@ interface ChatMessage {
   createdAt: string;
 }
 
+// Types for reports data
+interface ReportSession {
+  _id: string;
+  exerciseName: string;
+  completedReps: number;
+  reps: number;
+  sets: number;
+  durationMs: number;
+  painEvents: { timeMs: number; level: string }[];
+  formDistribution: { good: number; warning: number; neutral: number };
+  createdAt: string;
+}
+
+interface ReportAssignment {
+  _id: string;
+  date: string;
+  exercises: { exerciseId: string; exerciseName: string; completed: boolean }[];
+  allCompleted: boolean;
+}
+
 export default function PatientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -62,6 +94,12 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"assign" | "reports" | "chat">("assign");
+
+  // Reports state
+  const [reportSessions, setReportSessions] = useState<ReportSession[]>([]);
+  const [reportAssignments, setReportAssignments] = useState<ReportAssignment[]>([]);
+  const [reportsLoaded, setReportsLoaded] = useState(false);
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -93,6 +131,31 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
       .catch(() => setError("Failed to load data"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Lazy-load reports data when tab is first opened
+  useEffect(() => {
+    if (activeTab !== "reports" || reportsLoaded) return;
+    (async () => {
+      try {
+        const [sessRes, assignRes] = await Promise.all([
+          fetch(`/api/exercise-sessions?userId=${id}`),
+          fetch(`/api/assignments?userId=${id}`),
+        ]);
+        if (sessRes.ok) {
+          const data = await sessRes.json();
+          setReportSessions(data.sessions || []);
+        }
+        if (assignRes.ok) {
+          const data = await assignRes.json();
+          setReportAssignments(data.assignments || []);
+        }
+      } catch {
+        // ignore
+      } finally {
+        setReportsLoaded(true);
+      }
+    })();
+  }, [activeTab, reportsLoaded, id]);
 
   // Chat: fetch messages
   const fetchMessages = useCallback(async () => {
@@ -235,7 +298,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Today's Assignment */}
       {todayAssignment && (
-        <div className="card animate-in" style={{ marginBottom: "var(--space-xl)", animationDelay: "60ms", padding: "var(--space-lg)" }}>
+        <div className="card animate-in" style={{ marginBottom: "var(--space-lg)", animationDelay: "60ms", padding: "var(--space-lg)" }}>
           <h3 style={{ fontWeight: 700, fontSize: "18px", marginBottom: "var(--space-md)" }}>Today&apos;s Assignment</h3>
           <div style={{ display: "flex", gap: "var(--space-md)", flexWrap: "wrap" }}>
             {todayAssignment.exercises.map((ex, i) => (
@@ -273,10 +336,41 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* Two-column layout: Assign Exercises + Chat */}
-      <div style={{ display: "grid", gridTemplateColumns: "540px 0.8fr", gap: "var(--space-xl)", alignItems: "stretch" }}>
-        {/* LEFT: Assign Exercises */}
-        <div className="animate-in" style={{ animationDelay: "120ms" }}>
+      {/* Subtab bar */}
+      <div className="animate-in" style={{ animationDelay: "120ms", display: "flex", gap: 0, marginBottom: "var(--space-lg)", borderBottom: "2px solid var(--color-gray-100)" }}>
+        {([
+          { key: "assign" as const, label: "Assign", icon: <ClipboardList size={16} /> },
+          { key: "reports" as const, label: "Reports", icon: <BarChart3 size={16} /> },
+          { key: "chat" as const, label: "Chat", icon: <MessageCircle size={16} /> },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "var(--space-sm) var(--space-lg)",
+              fontSize: "15px",
+              fontWeight: activeTab === tab.key ? 700 : 600,
+              color: activeTab === tab.key ? "var(--color-primary)" : "var(--color-gray-300)",
+              background: "none",
+              border: "none",
+              borderBottom: activeTab === tab.key ? "3px solid var(--color-primary)" : "3px solid transparent",
+              cursor: "pointer",
+              marginBottom: -2,
+              transition: "all 0.15s ease",
+            }}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Assign Tab ── */}
+      {activeTab === "assign" && (
+        <div className="animate-in">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-lg)", flexWrap: "wrap", gap: "var(--space-md)" }}>
             <h3 style={{ fontSize: "24px", fontWeight: 800, margin: 0 }}>
               Assign Exercises
@@ -299,7 +393,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
           {/* Exercise cards */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
+            gridTemplateColumns: "repeat(3, 1fr)",
             gap: "var(--space-lg)",
             marginBottom: "var(--space-xl)",
           }}>
@@ -465,15 +559,34 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             {assigning ? "Assigning..." : `Assign Selected (${selected.size})`}
           </button>
         </div>
+      )}
 
-        {/* RIGHT: Chat with Patient */}
+      {/* ── Reports Tab ── */}
+      {activeTab === "reports" && (
+        <div className="animate-in">
+          {!reportsLoaded ? (
+            <div style={{ textAlign: "center", padding: "var(--space-xl)", color: "var(--color-gray-300)" }}>
+              Loading reports...
+            </div>
+          ) : (
+            <PatientReportsTab
+              sessions={reportSessions}
+              assignments={reportAssignments}
+              streak={{ currentStreak: 0, longestStreak: 0, history: [] }}
+              patientName={patient?.name || "Patient"}
+            />
+          )}
+        </div>
+      )}
+
+      {/* ── Chat Tab ── */}
+      {activeTab === "chat" && (
         <div
           className="animate-in"
           style={{
-            animationDelay: "180ms",
             display: "flex",
             flexDirection: "column",
-            minHeight: 0,
+            height: "calc(100vh - 320px)",
             borderRadius: "var(--radius-lg)",
             border: "2px solid var(--color-gray-100)",
             backgroundColor: "var(--color-white)",
@@ -521,7 +634,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
               >
                 <div
                   style={{
-                    maxWidth: "85%",
+                    maxWidth: "60%",
                     padding: "10px 14px",
                     borderRadius: msg.isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                     backgroundColor: msg.isMine ? "var(--color-primary)" : "var(--color-snow)",
@@ -570,7 +683,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             </button>
           </form>
         </div>
-      </div>
+      )}
     </div>
   );
 }

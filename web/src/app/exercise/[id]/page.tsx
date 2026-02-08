@@ -6,7 +6,7 @@ import CameraFeed from "@/components/CameraFeed";
 import PoseOverlay from "@/components/PoseOverlay";
 import SkeletonViewer from "@/components/SkeletonViewer";
 import { useExerciseWebSocket } from "@/hooks/useExerciseWebSocket";
-import DebugPanel from "@/components/DebugPanel";
+import { useCoachingVoice } from "@/hooks/useCoachingVoice";
 import PainStopOverlay from "@/components/PainStopOverlay";
 import SetBreakOverlay from "@/components/SetBreakOverlay";
 import ExerciseReport from "@/components/ExerciseReport";
@@ -24,7 +24,10 @@ import {
   Eye,
   Zap,
   Navigation,
+  Activity,
+  Bug,
 } from "lucide-react";
+import type { CoachingMessage } from "@/hooks/useExerciseWebSocket";
 
 /* ── Exercise-specific instructions by exerciseKey ── */
 const EXERCISE_INSTRUCTIONS: Record<string, string[]> = {
@@ -94,6 +97,11 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   // Transition animation
   const [transitioning, setTransitioning] = useState(false);
 
+  // Debug panel toggle
+  const [debugOpen, setDebugOpen] = useState(false);
+  // Live snapshot of rmsHistory for rendering (refs don't trigger re-renders)
+  const [rmsHistorySnapshot, setRmsHistorySnapshot] = useState<{ timeSec: number; rms: number }[]>([]);
+
   // Pain stop state
   const [paused, setPaused] = useState(false);
   const painStopCooldownRef = useRef(false);
@@ -107,6 +115,14 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     painEvents: [] as { timeMs: number; level: string }[],
     formSamples: [] as string[],
     lastPainLevel: "normal",
+  });
+
+  // RMS history sampling (for Form Quality Over Time chart in report)
+  const rmsHistoryRef = useRef<{ timeSec: number; rms: number }[]>([]);
+  // Coaching voice metrics ref (the hook records interventions here)
+  const coachingMetricsRef = useRef({
+    coachingInterventions: [] as { timeSec: number; message: string }[],
+    startTime: 0,
   });
 
   // WebSocket
@@ -123,9 +139,43 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     repState,
     sixSevenTriggered,
     landmarksRef,
+    coachingRef,
+    rmsDiv,
+    coachingMessages,
     startCapture,
     stopCapture,
   } = useExerciseWebSocket(phase === "active" ? exerciseKey : null);
+
+  // Voice coaching (triggers on RMS peaks/valleys)
+  useCoachingVoice({
+    active: phase === "active",
+    rmsDiv,
+    coachingMessages,
+    coachingRef,
+    fullName: name,
+    metricsRef: coachingMetricsRef,
+  });
+
+  // Sample RMS divergence every ~500ms for the report chart
+  useEffect(() => {
+    if (phase !== "active" || metricsRef.current.startTime === 0) return;
+    const interval = setInterval(() => {
+      const timeSec = (Date.now() - metricsRef.current.startTime) / 1000;
+      rmsHistoryRef.current.push({ timeSec: Math.round(timeSec * 10) / 10, rms: rmsDiv });
+      // Copy to state snapshot when debug panel is open so chart live-updates
+      if (debugOpen) {
+        setRmsHistorySnapshot([...rmsHistoryRef.current]);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [phase, rmsDiv, debugOpen]);
+
+  // Sync coaching metrics start time with main metrics
+  useEffect(() => {
+    if (phase === "active" && metricsRef.current.startTime > 0) {
+      coachingMetricsRef.current.startTime = metricsRef.current.startTime;
+    }
+  }, [phase]);
 
   // Toggle hero info panel
   const toggleInfo = useCallback(() => {
@@ -359,6 +409,10 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
             repTimestamps: metricsRef.current.repTimestamps,
             painEvents: metricsRef.current.painEvents,
             formDistribution: formDist,
+            rmsHistory: rmsHistoryRef.current.length > 0 ? rmsHistoryRef.current : undefined,
+            coachingInterventions: coachingMetricsRef.current.coachingInterventions.length > 0
+              ? coachingMetricsRef.current.coachingInterventions.map((ci) => ({ timeSec: ci.timeSec, text: ci.message }))
+              : undefined,
           }),
         });
         if (sessionRes.ok) {
@@ -759,7 +813,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         <div className="session-camera">
           <div style={{ width: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
             <CameraFeed active onVideoReady={handleVideoReady} />
-            <PoseOverlay landmarksRef={landmarksRef} active={phase === "active" && wsConnected} />
+            <PoseOverlay landmarksRef={landmarksRef} coachingRef={coachingRef} active={phase === "active" && wsConnected} />
 
             {formBadge && (
               <div className="animate-bounce-gentle" style={{
@@ -810,7 +864,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                       letterSpacing: "0.02em",
                     }}
                   >
-                    {painDetected ? "Pain ✓" : "Pain X"}
+                    {painDetected ? "Pain \u2713" : "Pain X"}
                   </div>
                   <div style={{
                     padding: "4px 8px",
@@ -837,18 +891,32 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
             )}
           </div>
 
-          {/* Exercise instructions below camera */}
-          <div className="camera-instructions">
-            <Info size={16} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {instructionSteps.map((step, idx) => (
-                <p key={idx} style={{ fontSize: "14px", fontWeight: 500, color: "var(--color-gray-400)", lineHeight: 1.4 }}>
-                  <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>{idx + 1}. </span>
-                  {step}
-                </p>
-              ))}
+          {/* Below camera: instructions OR coaching data when debug toggled */}
+          {debugOpen && phase === "active" && exerciseKey ? (
+            <CoachingPanel
+              rmsDiv={rmsDiv}
+              rmsHistory={rmsHistorySnapshot}
+              coachingMessages={coachingMessages}
+              formQuality={formQuality}
+              painLevel={painLevel}
+              ear={ear}
+              mar={mar}
+              repState={repState}
+              angle={angle}
+            />
+          ) : (
+            <div className="camera-instructions">
+              <Info size={16} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {instructionSteps.map((step, idx) => (
+                  <p key={idx} style={{ fontSize: "14px", fontWeight: 500, color: "var(--color-gray-400)", lineHeight: 1.4 }}>
+                    <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>{idx + 1}. </span>
+                    {step}
+                  </p>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="session-dashboard">
@@ -903,18 +971,193 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
+      {/* Debug toggle button */}
       {exerciseKey && (
-        <DebugPanel
-          painLevel={painLevel}
-          ear={ear}
-          mar={mar}
-          repCount={currentRep}
-          repState={repState}
-          angle={angle}
-          formQuality={formQuality}
-          wsConnected={wsConnected}
-        />
+        <button
+          className="debug-toggle"
+          onClick={() => setDebugOpen((v) => !v)}
+          title="Toggle Debug Panel"
+          style={{
+            backgroundColor: debugOpen ? "var(--color-primary)" : undefined,
+          }}
+        >
+          <Bug size={18} color="white" />
+        </button>
       )}
     </div>
+  );
+}
+
+/* ── Inline Coaching Data Panel ── */
+
+interface RmsEntry { timeSec: number; rms: number }
+
+function CoachingPanel({
+  rmsDiv,
+  rmsHistory,
+  coachingMessages,
+  formQuality,
+  painLevel,
+  ear,
+  mar,
+  repState,
+  angle,
+}: {
+  rmsDiv: number;
+  rmsHistory: RmsEntry[];
+  coachingMessages: CoachingMessage[];
+  formQuality: string;
+  painLevel: string;
+  ear: number;
+  mar: number;
+  repState: string;
+  angle: number;
+}) {
+  const rmsColor = rmsDiv < 0.04 ? "#58CC02" : rmsDiv < 0.1 ? "#FF9600" : "#EA2B2B";
+  const rmsLabel = rmsDiv < 0.04 ? "Excellent" : rmsDiv < 0.1 ? "Adjusting" : "Needs Work";
+
+  // Last 3 coaching messages (most recent first)
+  const recentMessages = coachingMessages.slice(-3).reverse();
+
+  return (
+    <div style={{
+      padding: "var(--space-md)",
+      borderRadius: "var(--radius-lg)",
+      backgroundColor: "var(--color-white)",
+      border: "2px solid var(--color-gray-100)",
+      display: "flex",
+      flexDirection: "column",
+      gap: "var(--space-sm)",
+    }}>
+      {/* Top row: RMS gauge + sparkline + stats */}
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
+        {/* RMS Divergence gauge */}
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", minWidth: 120 }}>
+          <Activity size={16} color={rmsColor} />
+          <div>
+            <div style={{ fontSize: "18px", fontWeight: 800, color: rmsColor, lineHeight: 1 }}>
+              {rmsDiv.toFixed(3)}
+            </div>
+            <div style={{ fontSize: "10px", fontWeight: 600, color: "var(--color-gray-300)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {rmsLabel}
+            </div>
+          </div>
+        </div>
+
+        {/* RMS Sparkline */}
+        {rmsHistory.length > 2 && (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <MiniSparkline data={rmsHistory} />
+          </div>
+        )}
+
+        {/* Quick stats */}
+        <div style={{ display: "flex", gap: "var(--space-md)", fontSize: "11px", color: "var(--color-gray-300)", flexShrink: 0 }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{
+              fontWeight: 700,
+              fontSize: "13px",
+              color: formQuality === "good" ? "#58CC02" : formQuality === "warning" ? "#FF9600" : "var(--color-gray-400)",
+            }}>
+              {formQuality}
+            </div>
+            <div style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Form</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--color-gray-500)" }}>
+              {angle.toFixed(0)}&deg;
+            </div>
+            <div style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Angle</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontWeight: 700, fontSize: "13px", color: "var(--color-primary)" }}>
+              {repState}
+            </div>
+            <div style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>State</div>
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <div style={{
+              fontWeight: 700,
+              fontSize: "13px",
+              color: painLevel === "normal" ? "#58CC02" : painLevel === "warning" ? "#FF9600" : "#EA2B2B",
+            }}>
+              {painLevel}
+            </div>
+            <div style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Pain</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Face metrics row */}
+      <div style={{
+        display: "flex",
+        gap: "var(--space-lg)",
+        fontSize: "11px",
+        color: "var(--color-gray-300)",
+        borderTop: "1px solid var(--color-gray-100)",
+        paddingTop: "var(--space-sm)",
+      }}>
+        <span>EAR: <span style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--color-gray-500)" }}>{ear.toFixed(3)}</span> {ear < 0.21 ? "(closed)" : "(open)"}</span>
+        <span>MAR: <span style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--color-gray-500)" }}>{mar.toFixed(3)}</span> {mar > 0.6 ? "(open)" : "(closed)"}</span>
+        <span>Corrections: <span style={{ fontWeight: 700, color: "var(--color-orange)" }}>{coachingMessages.length}</span></span>
+      </div>
+
+      {/* Recent coaching messages */}
+      {recentMessages.length > 0 && (
+        <div style={{
+          borderTop: "1px solid var(--color-gray-100)",
+          paddingTop: "var(--space-sm)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 3,
+        }}>
+          {recentMessages.map((msg, i) => (
+            <div key={i} style={{
+              fontSize: "13px",
+              fontWeight: 500,
+              color: i === 0 ? "var(--color-orange)" : "var(--color-gray-300)",
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-xs)",
+            }}>
+              <span style={{ fontSize: "10px" }}>{i === 0 ? "\u25B6" : "\u25AA"}</span>
+              {msg.text}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniSparkline({ data }: { data: RmsEntry[] }) {
+  const w = 200;
+  const h = 28;
+  const maxRms = Math.max(0.15, ...data.map((d) => d.rms));
+  const recent = data.slice(-60);
+  if (recent.length < 2) return null;
+
+  const points = recent.map((d, i) => {
+    const x = (i / (recent.length - 1)) * w;
+    const y = h - (d.rms / maxRms) * (h - 2) - 1;
+    return `${x},${y}`;
+  });
+
+  // Threshold line at 0.04
+  const threshY = h - (0.04 / maxRms) * (h - 2) - 1;
+
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: "block" }}>
+      {/* Good threshold */}
+      <line x1={0} y1={threshY} x2={w} y2={threshY} stroke="#58CC02" strokeWidth={0.5} strokeDasharray="3 3" opacity={0.5} />
+      {/* RMS line */}
+      <polyline
+        points={points.join(" ")}
+        fill="none"
+        stroke="#02caca"
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

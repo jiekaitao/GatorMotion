@@ -16,23 +16,24 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const view = searchParams.get("view");
+  const targetUserId = searchParams.get("userId") || session.userId;
 
   if (view === "today") {
-    const assignment = await getTodayAssignment(session.userId);
+    const assignment = await getTodayAssignment(targetUserId);
     return NextResponse.json({ assignment });
   }
 
   if (view === "incomplete") {
-    const assignments = await getIncompleteAssignments(session.userId);
+    const assignments = await getIncompleteAssignments(targetUserId);
     return NextResponse.json({ assignments });
   }
 
   if (view === "past") {
-    const assignments = await getPastAssignments(session.userId);
+    const assignments = await getPastAssignments(targetUserId);
     return NextResponse.json({ assignments });
   }
 
-  const assignments = await getUserAssignments(session.userId);
+  const assignments = await getUserAssignments(targetUserId);
   return NextResponse.json({ assignments });
 }
 

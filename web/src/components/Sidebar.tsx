@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Home,
-  Users,
   Wrench,
   Settings,
 } from "lucide-react";
@@ -17,7 +16,6 @@ const patientLinks = [
 
 const therapistLinks = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/therapist/patients", label: "Patients", icon: Users },
 ];
 
 export default function Sidebar() {
