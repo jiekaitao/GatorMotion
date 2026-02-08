@@ -74,7 +74,7 @@
   --shadow-tactile-lg: 0 6px 0;
 
   /* Layout */
-  --sidebar-width: 256px;
+  --sidebar-width: 280px;
 
   /* Animations */
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -128,7 +128,7 @@ a { color: var(--color-blue); text-decoration: none; }
   display: none;
   flex-direction: column;
   width: var(--sidebar-width);
-  padding: var(--space-xl);
+  padding: var(--space-lg);
   border-right: 2px solid var(--color-gray-100);
   background-color: var(--color-white);
   position: fixed;
@@ -643,6 +643,7 @@ a { color: var(--color-blue); text-decoration: none; }
 @media (min-width: 768px) {
   .home-grid {
     grid-template-columns: 1fr 1fr;
+    align-items: start;
   }
   .home-grid-full {
     grid-column: 1 / -1;

@@ -459,7 +459,8 @@ export default function HomePage() {
                 );
               })
             ) : (
-              <div className="card text-center" style={{ padding: "var(--space-2xl)" }}>
+              <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
+                <Dumbbell size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
                 <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>
                   No exercises assigned yet.
                 </p>
@@ -476,8 +477,7 @@ export default function HomePage() {
 
         {/* ── Messages Section ── */}
         <section>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-md)" }}>
-            <MessageCircle size={22} color="var(--color-primary)" />
+          <div style={{ display: "flex", alignItems: "center", marginBottom: "var(--space-md)" }}>
             <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Conversations</h3>
           </div>
 
