@@ -28,6 +28,19 @@ export interface PoseLandmark {
   visibility?: number;
 }
 
+export interface CoachingDivergence {
+  joint: string;
+  distance: number;
+}
+
+export interface CoachingData {
+  divergences: CoachingDivergence[];
+}
+
+export interface CoachingMessage {
+  type: string;
+  text: string;
+}
 export interface LandmarkFrame {
   prev: PoseLandmark[] | null;
   current: PoseLandmark[] | null;
