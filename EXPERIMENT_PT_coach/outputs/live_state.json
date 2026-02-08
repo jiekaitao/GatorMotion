@@ -1,0 +1,262 @@
+{
+  "ts_ms": 1770524529160,
+  "exercise": {
+    "name": "squat",
+    "phase": "setup",
+    "rep": 0,
+    "reference_frame": 2
+  },
+  "quality": {
+    "score": 0.0,
+    "confidence": 0.393,
+    "distance": 74.6941
+  },
+  "measurements": {
+    "left_knee_angle_deg": 177.9,
+    "right_knee_angle_deg": 176.0,
+    "avg_knee_angle_deg": 177.0,
+    "left_foot_x_body": 6.309,
+    "right_foot_x_body": 5.457
+  },
+  "corrections": [
+    {
+      "id": "RIGHT_ANKLE_28",
+      "severity": "high",
+      "side": "right",
+      "part": "ankle",
+      "target": {
+        "delta_x_body": -6.1942,
+        "delta_y_body": -2.5096,
+        "units": "body_norm"
+      },
+      "why": {
+        "metric": "body_frame_position_error",
+        "current_x": 5.1122,
+        "target_x": -1.082,
+        "delta_x": 6.1942,
+        "tol_x": 0.3607,
+        "current_y": -4.0548,
+        "target_y": -6.5645,
+        "delta_y": 2.5096,
+        "tol_y": 0.3785,
+        "ratio_x": 17.171,
+        "ratio_y": 6.63,
+        "ratio": 17.171
+      },
+      "why_text": "x +5.11->-1.08 (tol 0.36), y -4.05->-6.56 (tol 0.38), ratio 17.17x",
+      "ui": {
+        "landmark_index": 28,
+        "current_xy_norm": [
+          0.3705,
+          2.6695
+        ],
+        "target_xy_norm": [
+          -0.4592,
+          2.0675
+        ]
+      },
+      "text": "Move your right ankle right and down more.",
+      "error_ratio": 17.171
+    },
+    {
+      "id": "RIGHT_FOOT_32",
+      "severity": "high",
+      "side": "right",
+      "part": "foot",
+      "target": {
+        "delta_x_body": -6.7966,
+        "delta_y_body": -2.5196,
+        "units": "body_norm"
+      },
+      "why": {
+        "metric": "body_frame_position_error",
+        "current_x": 5.457,
+        "target_x": -1.3396,
+        "delta_x": 6.7966,
+        "tol_x": 0.4182,
+        "current_y": -4.8306,
+        "target_y": -7.3502,
+        "delta_y": 2.5196,
+        "tol_y": 0.4059,
+        "ratio_x": 16.253,
+        "ratio_y": 6.207,
+        "ratio": 16.253
+      },
+      "why_text": "x +5.46->-1.34 (tol 0.42), y -4.83->-7.35 (tol 0.41), ratio 16.25x",
+      "ui": {
+        "landmark_index": 32,
+        "current_xy_norm": [
+          0.2875,
+          2.8101
+        ],
+        "target_xy_norm": [
+          -0.595,
+          2.1505
+        ]
+      },
+      "text": "Move your right foot right and down more.",
+      "error_ratio": 16.253
+    },
+    {
+      "id": "RIGHT_KNEE_26",
+      "severity": "high",
+      "side": "right",
+      "part": "knee",
+      "target": {
+        "delta_x_body": -3.0924,
+        "delta_y_body": -1.1393,
+        "units": "body_norm"
+      },
+      "why": {
+        "metric": "body_frame_position_error",
+        "current_x": 2.3574,
+        "target_x": -0.735,
+        "delta_x": 3.0924,
+        "tol_x": 0.1905,
+        "current_y": -2.2128,
+        "target_y": -3.3521,
+        "delta_y": 1.1393,
+        "tol_y": 0.3247,
+        "ratio_x": 16.237,
+        "ratio_y": 3.509,
+        "ratio": 16.237
+      },
+      "why_text": "x +2.36->-0.74 (tol 0.19), y -2.21->-3.35 (tol 0.32), ratio 16.24x",
+      "ui": {
+        "landmark_index": 26,
+        "current_xy_norm": [
+          0.4021,
+          1.9515
+        ],
+        "target_xy_norm": [
+          -0.0072,
+          1.6404
+        ]
+      },
+      "text": "Move your right knee right and down more.",
+      "error_ratio": 16.237
+    },
+    {
+      "id": "LEFT_ANKLE_27",
+      "severity": "high",
+      "side": "left",
+      "part": "ankle",
+      "target": {
+        "delta_x_body": -5.1753,
+        "delta_y_body": -2.6096,
+        "units": "body_norm"
+      },
+      "why": {
+        "metric": "body_frame_position_error",
+        "current_x": 6.0457,
+        "target_x": 0.8704,
+        "delta_x": 5.1753,
+        "tol_x": 0.3711,
+        "current_y": -3.7976,
+        "target_y": -6.4072,
+        "delta_y": 2.6096,
+        "tol_y": 0.3748,
+        "ratio_x": 13.947,
+        "ratio_y": 6.963,
+        "ratio": 13.947
+      },
+      "why_text": "x +6.05->+0.87 (tol 0.37), y -3.80->-6.41 (tol 0.37), ratio 13.95x",
+      "ui": {
+        "landmark_index": 27,
+        "current_xy_norm": [
+          0.5379,
+          2.7738
+        ],
+        "target_xy_norm": [
+          -0.1536,
+          2.2883
+        ]
+      },
+      "text": "Move your left ankle right and down more.",
+      "error_ratio": 13.947
+    },
+    {
+      "id": "LEFT_KNEE_25",
+      "severity": "high",
+      "side": "left",
+      "part": "knee",
+      "target": {
+        "delta_x_body": -2.8181,
+        "delta_y_body": -1.3989,
+        "units": "body_norm"
+      },
+      "why": {
+        "metric": "body_frame_position_error",
+        "current_x": 3.4134,
+        "target_x": 0.5953,
+        "delta_x": 2.8181,
+        "tol_x": 0.2187,
+        "current_y": -1.9213,
+        "target_y": -3.3203,
+        "delta_y": 1.3989,
+        "tol_y": 0.3717,
+        "ratio_x": 12.884,
+        "ratio_y": 3.764,
+        "ratio": 12.884
+      },
+      "why_text": "x +3.41->+0.60 (tol 0.22), y -1.92->-3.32 (tol 0.37), ratio 12.88x",
+      "ui": {
+        "landmark_index": 25,
+        "current_xy_norm": [
+          0.5685,
+          2.0945
+        ],
+        "target_xy_norm": [
+          0.1916,
+          1.8018
+        ]
+      },
+      "text": "Move your left knee right and down more.",
+      "error_ratio": 12.884
+    },
+    {
+      "id": "LEFT_FOOT_31",
+      "severity": "high",
+      "side": "left",
+      "part": "foot",
+      "target": {
+        "delta_x_body": -5.0618,
+        "delta_y_body": -2.5816,
+        "units": "body_norm"
+      },
+      "why": {
+        "metric": "body_frame_position_error",
+        "current_x": 6.3087,
+        "target_x": 1.2469,
+        "delta_x": 5.0618,
+        "tol_x": 0.4066,
+        "current_y": -4.7295,
+        "target_y": -7.3111,
+        "delta_y": 2.5816,
+        "tol_y": 0.3845,
+        "ratio_x": 12.45,
+        "ratio_y": 6.713,
+        "ratio": 12.45
+      },
+      "why_text": "x +6.31->+1.25 (tol 0.41), y -4.73->-7.31 (tol 0.38), ratio 12.45x",
+      "ui": {
+        "landmark_index": 31,
+        "current_xy_norm": [
+          0.4067,
+          2.912
+        ],
+        "target_xy_norm": [
+          -0.2113,
+          2.4677
+        ]
+      },
+      "text": "Move your left foot right and down more.",
+      "error_ratio": 12.45
+    }
+  ],
+  "speech": {
+    "should_speak": true,
+    "text": "Move your right ankle right and down more.",
+    "cooldown_ms": 5000
+  }
+}
