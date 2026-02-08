@@ -15,7 +15,7 @@ export async function GET() {
 
   const recentUsers = await db
     .collection("users")
-    .find({}, { projection: { passwordHash: 0 } })
+    .find({})
     .sort({ createdAt: -1 })
     .limit(10)
     .toArray();

@@ -8,8 +8,7 @@ import Image from "next/image";
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [role, setRole] = useState<"patient" | "therapist">("patient");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +22,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ name, username, role }),
       });
 
       const data = await res.json();
@@ -83,31 +82,16 @@ export default function RegisterPage() {
             </div>
 
             <div className="login-field">
-              <label className="login-label" htmlFor="reg-email">Email</label>
+              <label className="login-label" htmlFor="reg-username">Username</label>
               <input
-                id="reg-email"
-                type="email"
+                id="reg-username"
+                type="text"
                 className="login-input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Pick a unique username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
-                autoComplete="email"
-              />
-            </div>
-
-            <div className="login-field">
-              <label className="login-label" htmlFor="reg-password">Password</label>
-              <input
-                id="reg-password"
-                type="password"
-                className="login-input"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                autoComplete="new-password"
+                autoComplete="username"
               />
             </div>
 

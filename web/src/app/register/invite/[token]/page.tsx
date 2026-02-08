@@ -7,8 +7,7 @@ export default function InviteRegisterPage({ params }: { params: Promise<{ token
   const { token } = use(params);
   const router = useRouter();
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [therapistName, setTherapistName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +22,6 @@ export default function InviteRegisterPage({ params }: { params: Promise<{ token
       })
       .then((data) => {
         setTherapistName(data.therapistName);
-        setEmail(data.patientEmail);
         setPageLoading(false);
       })
       .catch(() => {
@@ -41,7 +39,7 @@ export default function InviteRegisterPage({ params }: { params: Promise<{ token
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role: "patient", inviteToken: token }),
+        body: JSON.stringify({ name, username, role: "patient", inviteToken: token }),
       });
 
       const data = await res.json();
@@ -109,28 +107,15 @@ export default function InviteRegisterPage({ params }: { params: Promise<{ token
         </div>
 
         <div>
-          <label className="input-label" htmlFor="inv-email">Email</label>
+          <label className="input-label" htmlFor="inv-username">Username</label>
           <input
-            id="inv-email"
-            type="email"
+            id="inv-username"
+            type="text"
             className="input"
-            value={email}
-            readOnly
-            style={{ backgroundColor: "var(--color-snow)", color: "var(--color-gray-400)" }}
-          />
-        </div>
-
-        <div>
-          <label className="input-label" htmlFor="inv-password">Password</label>
-          <input
-            id="inv-password"
-            type="password"
-            className="input"
-            placeholder="At least 6 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Pick a unique username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
-            minLength={6}
           />
         </div>
 

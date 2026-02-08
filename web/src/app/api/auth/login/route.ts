@@ -1,37 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPassword, setSessionCookie } from "@/lib/auth";
-import { findUserByEmail } from "@/lib/db-helpers";
+import { setSessionCookie } from "@/lib/auth";
+import { findUserByUsername } from "@/lib/db-helpers";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { email, password } = body;
+  const { username } = body;
 
-  if (!email || !password) {
+  if (!username) {
     return NextResponse.json(
-      { error: "Email and password are required" },
+      { error: "Username is required" },
       { status: 400 }
     );
   }
 
-  const user = await findUserByEmail(email);
+  const user = await findUserByUsername(username);
   if (!user) {
     return NextResponse.json(
-      { error: "Invalid email or password" },
-      { status: 401 }
-    );
-  }
-
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) {
-    return NextResponse.json(
-      { error: "Invalid email or password" },
+      { error: "User not found" },
       { status: 401 }
     );
   }
 
   await setSessionCookie({
     userId: user._id.toString(),
-    email: user.email,
+    username: user.username,
     name: user.name,
     role: user.role,
   });
@@ -40,7 +32,7 @@ export async function POST(req: NextRequest) {
     success: true,
     user: {
       id: user._id.toString(),
-      email: user.email,
+      username: user.username,
       name: user.name,
       role: user.role,
     },

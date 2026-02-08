@@ -1,5 +1,4 @@
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { getDb } from "./mongodb";
 import { ObjectId } from "mongodb";
@@ -9,20 +8,9 @@ const COOKIE_NAME = "pt_session";
 
 export interface UserPayload {
   userId: string;
-  email: string;
+  username: string;
   name: string;
   role: "patient" | "therapist";
-}
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
-}
-
-export async function verifyPassword(
-  password: string,
-  hash: string
-): Promise<boolean> {
-  return bcrypt.compare(password, hash);
 }
 
 export function signToken(payload: UserPayload): string {
@@ -67,8 +55,7 @@ export async function getCurrentUser() {
 
   const db = await getDb();
   const user = await db.collection("users").findOne(
-    { _id: new ObjectId(session.userId) },
-    { projection: { passwordHash: 0 } }
+    { _id: new ObjectId(session.userId) }
   );
 
   return user;

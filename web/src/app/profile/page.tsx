@@ -8,7 +8,7 @@ import { LogOut, User } from "lucide-react";
 interface UserInfo {
   id: string;
   name: string;
-  email: string;
+  username: string;
   role: string;
 }
 
@@ -67,7 +67,7 @@ export default function ProfilePage() {
             <User size={36} color="var(--color-blue)" />
           </div>
           <h2>{user.name}</h2>
-          <p className="text-small">{user.email}</p>
+          <p className="text-small">@{user.username}</p>
           <div className="badge badge-blue" style={{ margin: "var(--space-sm) auto 0" }}>
             {user.role}
           </div>

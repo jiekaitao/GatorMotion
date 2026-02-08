@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { User, Lock, Check, LogOut } from "lucide-react";
+import { User, Check, LogOut } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -11,17 +11,10 @@ export default function SettingsPage() {
 
   // Profile form
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [role, setRole] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  // Password form
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordMsg, setPasswordMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -31,7 +24,7 @@ export default function SettingsPage() {
       })
       .then((data) => {
         setName(data.user.name);
-        setEmail(data.user.email);
+        setUsername(data.user.username);
         setRole(data.user.role);
       })
       .catch(() => router.replace("/login"))
@@ -47,7 +40,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/auth/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify({ name }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -59,39 +52,6 @@ export default function SettingsPage() {
       setProfileMsg({ type: "error", text: "Something went wrong" });
     } finally {
       setProfileSaving(false);
-    }
-  }
-
-  async function handlePasswordSubmit(e: FormEvent) {
-    e.preventDefault();
-    setPasswordMsg(null);
-
-    if (newPassword !== confirmPassword) {
-      setPasswordMsg({ type: "error", text: "New passwords don't match" });
-      return;
-    }
-
-    setPasswordSaving(true);
-
-    try {
-      const res = await fetch("/api/auth/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setPasswordMsg({ type: "error", text: data.error || "Failed to change password" });
-      } else {
-        setPasswordMsg({ type: "success", text: "Password changed!" });
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      }
-    } catch {
-      setPasswordMsg({ type: "error", text: "Something went wrong" });
-    } finally {
-      setPasswordSaving(false);
     }
   }
 
@@ -123,6 +83,18 @@ export default function SettingsPage() {
 
           <form onSubmit={handleProfileSubmit} className="stack stack-md">
             <div>
+              <label className="input-label" htmlFor="settings-username">Username</label>
+              <input
+                id="settings-username"
+                type="text"
+                className="input"
+                value={username}
+                readOnly
+                style={{ backgroundColor: "var(--color-snow)", color: "var(--color-gray-400)" }}
+              />
+            </div>
+
+            <div>
               <label className="input-label" htmlFor="settings-name">Full Name</label>
               <input
                 id="settings-name"
@@ -130,18 +102,6 @@ export default function SettingsPage() {
                 className="input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="input-label" htmlFor="settings-email">Email</label>
-              <input
-                id="settings-email"
-                type="email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
@@ -171,83 +131,11 @@ export default function SettingsPage() {
           </form>
         </div>
 
-        {/* ── Password Section ── */}
-        <div className="card animate-in" style={{ animationDelay: "60ms", marginBottom: "var(--space-lg)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-lg)" }}>
-            <Lock size={20} color="var(--color-orange)" />
-            <h3 style={{ fontWeight: 700 }}>Change Password</h3>
-          </div>
-
-          <form onSubmit={handlePasswordSubmit} className="stack stack-md">
-            <div>
-              <label className="input-label" htmlFor="current-pw">Current Password</label>
-              <input
-                id="current-pw"
-                type="password"
-                className="input"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="input-label" htmlFor="new-pw">New Password</label>
-              <input
-                id="new-pw"
-                type="password"
-                className="input"
-                placeholder="At least 6 characters"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </div>
-
-            <div>
-              <label className="input-label" htmlFor="confirm-pw">Confirm New Password</label>
-              <input
-                id="confirm-pw"
-                type="password"
-                className="input"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </div>
-
-            {passwordMsg && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--space-sm)",
-                  padding: "10px 14px",
-                  borderRadius: "var(--radius-md)",
-                  backgroundColor: passwordMsg.type === "success" ? "var(--color-green-surface)" : "var(--color-red-light)",
-                  color: passwordMsg.type === "success" ? "var(--color-green-dark)" : "var(--color-red)",
-                  fontSize: "var(--text-small)",
-                  fontWeight: 600,
-                }}
-              >
-                {passwordMsg.type === "success" && <Check size={16} />}
-                {passwordMsg.text}
-              </div>
-            )}
-
-            <button type="submit" className="btn btn-secondary btn-full" disabled={passwordSaving}>
-              {passwordSaving ? "Changing..." : "Change Password"}
-            </button>
-          </form>
-        </div>
-
         {/* ── Logout ── */}
         <button
           onClick={handleLogout}
           className="btn btn-danger btn-full animate-in"
-          style={{ animationDelay: "120ms" }}
+          style={{ animationDelay: "60ms" }}
         >
           <LogOut size={18} />
           Log Out

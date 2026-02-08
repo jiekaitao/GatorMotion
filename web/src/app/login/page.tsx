@@ -8,8 +8,7 @@ import { Flame, Dumbbell, Shield } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +21,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username }),
       });
 
       const data = await res.json();
@@ -85,30 +84,16 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="login-form">
             <div className="login-field">
-              <label className="login-label" htmlFor="email">Email</label>
+              <label className="login-label" htmlFor="username">Username</label>
               <input
-                id="email"
-                type="email"
+                id="username"
+                type="text"
                 className="login-input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
-                autoComplete="email"
-              />
-            </div>
-
-            <div className="login-field">
-              <label className="login-label" htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                className="login-input"
-                placeholder="Your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
+                autoComplete="username"
               />
             </div>
 

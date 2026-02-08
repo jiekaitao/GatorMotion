@@ -6,8 +6,7 @@ import crypto from "crypto";
 
 export interface DbUser {
   _id: ObjectId;
-  email: string;
-  passwordHash: string;
+  username: string;
   name: string;
   role: "patient" | "therapist";
   therapistId?: string;
@@ -15,8 +14,7 @@ export interface DbUser {
 }
 
 export async function createUser(data: {
-  email: string;
-  passwordHash: string;
+  username: string;
   name: string;
   role: "patient" | "therapist";
 }) {
@@ -28,9 +26,9 @@ export async function createUser(data: {
   return result.insertedId;
 }
 
-export async function findUserByEmail(email: string) {
+export async function findUserByUsername(username: string) {
   const db = await getDb();
-  return db.collection<DbUser>("users").findOne({ email: email.toLowerCase() });
+  return db.collection<DbUser>("users").findOne({ username: username.toLowerCase() });
 }
 
 // ── Exercises ──
@@ -340,7 +338,6 @@ export async function getPatientsByTherapist(therapistId: string) {
   const patients = await db
     .collection<DbUser>("users")
     .find({ therapistId, role: "patient" })
-    .project({ passwordHash: 0 })
     .sort({ name: 1 })
     .toArray();
 
@@ -432,7 +429,7 @@ export async function getConversationList(userId: string) {
       // Get partner info
       const partner = await db
         .collection<DbUser>("users")
-        .findOne({ _id: new ObjectId(partnerId) }, { projection: { passwordHash: 0 } });
+        .findOne({ _id: new ObjectId(partnerId) });
 
       return {
         partnerId,
@@ -462,26 +459,16 @@ export async function markMessagesRead(senderId: string, receiverId: string) {
 
 // ── User Profile Updates ──
 
-export async function updateUserProfile(userId: string, data: { name?: string; email?: string }) {
+export async function updateUserProfile(userId: string, data: { name?: string }) {
   const db = await getDb();
   const update: Record<string, string> = {};
   if (data.name) update.name = data.name;
-  if (data.email) update.email = data.email.toLowerCase();
 
   if (Object.keys(update).length === 0) return false;
 
   const result = await db.collection("users").updateOne(
     { _id: new ObjectId(userId) },
     { $set: update }
-  );
-  return result.modifiedCount > 0;
-}
-
-export async function updateUserPassword(userId: string, newPasswordHash: string) {
-  const db = await getDb();
-  const result = await db.collection("users").updateOne(
-    { _id: new ObjectId(userId) },
-    { $set: { passwordHash: newPasswordHash } }
   );
   return result.modifiedCount > 0;
 }

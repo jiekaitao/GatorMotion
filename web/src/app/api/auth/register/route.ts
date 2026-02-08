@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hashPassword, setSessionCookie } from "@/lib/auth";
-import { createUser, findUserByEmail, findInviteByToken, acceptInvite } from "@/lib/db-helpers";
+import { setSessionCookie } from "@/lib/auth";
+import { createUser, findUserByUsername, findInviteByToken, acceptInvite } from "@/lib/db-helpers";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { email, password, name, role, inviteToken } = body;
+  const { username, name, role, inviteToken } = body;
 
-  if (!email || !password || !name) {
+  if (!username || !name) {
     return NextResponse.json(
-      { error: "Email, password, and name are required" },
-      { status: 400 }
-    );
-  }
-
-  if (password.length < 6) {
-    return NextResponse.json(
-      { error: "Password must be at least 6 characters" },
+      { error: "Username and name are required" },
       { status: 400 }
     );
   }
@@ -38,10 +31,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const existing = await findUserByEmail(email);
+  const existing = await findUserByUsername(username);
   if (existing) {
     return NextResponse.json(
-      { error: "An account with this email already exists" },
+      { error: "This username is already taken" },
       { status: 409 }
     );
   }
@@ -49,10 +42,8 @@ export async function POST(req: NextRequest) {
   // Force patient role when registering via invite
   const userRole = inviteToken ? "patient" : (role === "therapist" ? "therapist" : "patient");
 
-  const passwordHash = await hashPassword(password);
   const userId = await createUser({
-    email: email.toLowerCase(),
-    passwordHash,
+    username: username.toLowerCase(),
     name,
     role: userRole,
   });
@@ -64,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   await setSessionCookie({
     userId: userId.toString(),
-    email: email.toLowerCase(),
+    username: username.toLowerCase(),
     name,
     role: userRole,
   });
