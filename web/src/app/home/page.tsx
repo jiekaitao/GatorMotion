@@ -137,6 +137,20 @@ export default function HomePage() {
     fetchData();
   }, [fetchData]);
 
+  // Poll conversations every 5 seconds so message previews stay fresh
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/messages");
+        if (res.ok) {
+          const data = await res.json();
+          setConversations(data.conversations || []);
+        }
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Re-fetch immediately when an invite is accepted/declined
   useEffect(() => {
     const handler = () => fetchData();
