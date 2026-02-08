@@ -18,12 +18,27 @@ interface PainStatus {
   message: string;
 }
 
+export interface PoseLandmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility?: number;
+}
+
+export interface LandmarkFrame {
+  prev: PoseLandmark[] | null;
+  current: PoseLandmark[] | null;
+  prevTime: number;
+  currentTime: number;
+}
+
 interface UseExerciseWebSocketResult {
   connected: boolean;
   repCount: number;
   formQuality: string;
   painLevel: string;
   painMessage: string;
+  landmarksRef: React.RefObject<LandmarkFrame>;
   startCapture: (videoElement: HTMLVideoElement) => void;
   stopCapture: () => void;
 }
@@ -42,6 +57,12 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [painMessage, setPainMessage] = useState("");
 
   const lastUiUpdateRef = useRef(0);
+  const landmarksRef = useRef<LandmarkFrame>({
+    prev: null,
+    current: null,
+    prevTime: 0,
+    currentTime: 0,
+  });
 
   // Send a single frame
   const sendFrame = useCallback(() => {
@@ -71,10 +92,14 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   useEffect(() => {
     if (!exerciseKey) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const isSecure = window.location.protocol === "https:";
+    const protocol = isSecure ? "wss:" : "ws:";
     const urls = [
       `${protocol}//${window.location.host}/ws/exercise?exercise=${exerciseKey}&detect=pose,face`,
-      `ws://${window.location.hostname}:8000/ws/exercise?exercise=${exerciseKey}&detect=pose,face`,
+      // Fallback to direct FastAPI port (only works on non-HTTPS / local dev)
+      ...(!isSecure
+        ? [`ws://${window.location.hostname}:8000/ws/exercise?exercise=${exerciseKey}&detect=pose,face`]
+        : []),
     ];
 
     let urlIdx = 0;
@@ -99,6 +124,18 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
 
         const exercise: ExerciseStatus | undefined = data.exercise;
         const pain: PainStatus | undefined = data.pain;
+
+        // Update landmark ref every frame (no React re-render)
+        const pose: PoseLandmark[][] | undefined = data.pose;
+        if (pose && pose.length > 0 && pose[0].length > 0) {
+          const now = performance.now();
+          landmarksRef.current = {
+            prev: landmarksRef.current.current,
+            current: pose[0],
+            prevTime: landmarksRef.current.currentTime,
+            currentTime: now,
+          };
+        }
 
         // Throttle React state updates to ~4/sec
         const now = performance.now();
@@ -169,6 +206,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     formQuality,
     painLevel,
     painMessage,
+    landmarksRef,
     startCapture,
     stopCapture,
   };

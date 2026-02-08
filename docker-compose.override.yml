@@ -14,3 +14,4 @@ services:
       - "8000:8000"
     volumes:
       - ./cv_backend/main.py:/app/main.py
+      - ./cv_backend/rep_counter.py:/app/rep_counter.py

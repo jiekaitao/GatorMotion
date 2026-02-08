@@ -10,10 +10,11 @@ export async function GET() {
 
   const streak = await getStreak(session.userId);
 
+  const user = await findUserById(session.userId);
+
   let hasTherapist = false;
   let notificationCount = 0;
   if (session.role === "patient") {
-    const user = await findUserById(session.userId);
     hasTherapist = (user?.therapistIds?.length ?? 0) > 0;
     notificationCount = await getNotificationCount(session.userId);
   } else if (session.role === "therapist") {
@@ -28,6 +29,7 @@ export async function GET() {
       role: session.role,
       hasTherapist,
       notificationCount,
+      voiceId: user?.voiceId || "EXAVITQu4vr4xnSDxMaL",
     },
     streak: {
       currentStreak: streak.currentStreak,

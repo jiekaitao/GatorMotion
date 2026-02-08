@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, use, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CameraFeed from "@/components/CameraFeed";
+import PoseOverlay from "@/components/PoseOverlay";
 import SkeletonViewer from "@/components/SkeletonViewer";
 import { useExerciseWebSocket } from "@/hooks/useExerciseWebSocket";
 import confetti from "canvas-confetti";
@@ -88,6 +89,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     formQuality,
     painLevel,
     painMessage,
+    landmarksRef,
     startCapture,
     stopCapture,
   } = useExerciseWebSocket(phase === "active" ? exerciseKey : null);
@@ -520,6 +522,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         <div className="session-camera">
           <div style={{ width: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
             <CameraFeed active onVideoReady={handleVideoReady} />
+            <PoseOverlay landmarksRef={landmarksRef} active={phase === "active" && wsConnected} />
 
             {formBadge && (
               <div className="animate-bounce-gentle" style={{

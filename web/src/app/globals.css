@@ -597,6 +597,7 @@ a { color: var(--color-blue); text-decoration: none; }
 
 /* ── Layout Utilities ── */
 .page {
+  width: 100%;
   max-width: 1200px;
   padding: var(--space-md) var(--space-md);
   padding-bottom: 100px;

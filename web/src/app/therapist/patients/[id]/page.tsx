@@ -205,7 +205,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div className="page">
+    <div style={{ width: "100%", padding: "var(--space-md) var(--space-xl)", paddingBottom: "var(--space-xl)" }}>
       {/* Back button */}
       <button
         onClick={() => router.push("/therapist/patients")}
@@ -226,6 +226,10 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
         <ChevronLeft size={18} /> Back to Patients
       </button>
 
+      {/* Two-column layout: Left content + Chat */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "var(--space-xl)", alignItems: "start" }}>
+        {/* LEFT: Patient info + Assignment + Exercises */}
+        <div>
       {patient && (
         <div className="animate-in" style={{ marginBottom: "var(--space-xl)" }}>
           <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800 }}>{patient.name}</h1>
@@ -271,9 +275,6 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       )}
-
-      {/* Two-column layout: Assign Exercises + Chat */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "var(--space-xl)", alignItems: "start" }}>
         {/* LEFT: Assign Exercises */}
         <div className="animate-in" style={{ animationDelay: "120ms" }}>
           <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-sm)" }}>
@@ -495,6 +496,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             {assigning ? "Assigning..." : `Assign Selected (${selected.size})`}
           </button>
         </div>
+        </div>{/* end left column */}
 
         {/* RIGHT: Chat with Patient */}
         <div
@@ -503,8 +505,9 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             animationDelay: "180ms",
             display: "flex",
             flexDirection: "column",
-            height: "calc(100vh - 200px)",
-            minHeight: 400,
+            height: 500,
+            position: "sticky",
+            top: "var(--space-md)",
             borderRadius: "var(--radius-lg)",
             border: "2px solid var(--color-gray-100)",
             backgroundColor: "var(--color-white)",

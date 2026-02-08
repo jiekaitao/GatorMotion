@@ -9,6 +9,7 @@ export interface DbUser {
   name: string;
   role: "patient" | "therapist";
   therapistIds?: string[];
+  voiceId?: string;
   createdAt: Date;
 }
 
@@ -547,10 +548,11 @@ export async function markMessagesRead(senderId: string, receiverId: string) {
 
 // ── User Profile Updates ──
 
-export async function updateUserProfile(userId: string, data: { name?: string }) {
+export async function updateUserProfile(userId: string, data: { name?: string; voiceId?: string }) {
   const db = await getDb();
   const update: Record<string, string> = {};
   if (data.name) update.name = data.name;
+  if (data.voiceId) update.voiceId = data.voiceId;
 
   if (Object.keys(update).length === 0) return false;
 
