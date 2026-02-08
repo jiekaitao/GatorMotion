@@ -1,9 +1,11 @@
-.env
-
-# Python virtual env / caches
-.venv/
+credentials.txt
+DOC_credentials.txt
+.env*
+*.task
+models/
 __pycache__/
 *.pyc
+node_modules/
 
 # iOS build output
 ios_app/PhysioLiDAR/build/
@@ -11,3 +13,6 @@ ios_app/PhysioLiDAR/build/
 # Xcode / macOS local artifacts
 DerivedData/
 .DS_Store
+
+# Python virtual env
+.venv/

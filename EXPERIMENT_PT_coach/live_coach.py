@@ -1,0 +1,1147 @@
+#!/usr/bin/env python3
+"""Live PT coach demo: webcam pose inference + data-driven corrective feedback."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import textwrap
+import time
+from collections import deque
+from pathlib import Path
+from typing import Any
+
+import cv2
+import mediapipe as mp
+import numpy as np
+from mediapipe.tasks.python import BaseOptions
+from mediapipe.tasks.python.vision import (
+    PoseLandmarker,
+    PoseLandmarkerOptions,
+    PoseLandmarksConnections,
+    RunningMode,
+)
+
+from pt_coach.common import (
+    LANDMARK_INDEX,
+    feature_vector,
+    knee_angles_deg,
+    landmarks_list_to_np,
+    load_reference_json,
+    mediapipe_landmarks_to_np,
+    moving_average,
+    normalize_to_body_frame,
+)
+from pt_coach.exercises import available_exercises, get_exercise_spec
+
+POSE_CONNECTIONS = [
+    (int(conn.start), int(conn.end)) for conn in PoseLandmarksConnections.POSE_LANDMARKS
+]
+
+
+class PTCoachEngine:
+    def __init__(self, model_npz: Path, metadata_json: Path):
+        model = np.load(model_npz)
+        self.ref_norm = model["ref_norm"]  # (N,33,3)
+        self.ref_features_scaled = model["ref_features_scaled"]  # (N,D)
+        self.feat_mean = model["feat_mean"]
+        self.feat_std = model["feat_std"]
+
+        meta = json.loads(metadata_json.read_text(encoding="utf-8"))
+        self.meta = meta
+        self.feature_landmarks = [int(i) for i in meta["feature_landmarks"]]
+        self.correction_landmarks = [int(i) for i in meta["correction_landmarks"]]
+        self.tol = {int(k): v for k, v in meta["correction_tolerance"].items()}
+        self.dist_cal = meta["distance_calibration"]
+
+        self.rep_count = 0
+        self.rep_state = "standing"
+        self.knee_hist: deque[float] = deque(maxlen=10)
+        self.quality_hist: deque[float] = deque(maxlen=15)
+        self.last_spoken_message = ""
+        self.last_message_ts_ms = 0
+        self.active_corrections: dict[str, bool] = {}
+        self.activate_streak: dict[str, int] = {}
+        self.clear_streak: dict[str, int] = {}
+        self.overlay_state: dict[str, dict[str, np.ndarray]] = {}
+
+        # Lock the reference frame when a correction activates so the user
+        # has a stable target to move toward (prevents "chasing a moving arrow").
+        self.correction_target_lock: dict[str, int] = {}  # {correction_id: locked_ref_idx}
+        self.lock_max_phase_drift = 25  # unlock if user moves >25 frames past locked phase
+
+        # Stricter anti-pedantic hysteresis:
+        # only very high deviations trigger; clear once mostly corrected.
+        self.activate_ratio = 2.5
+        self.clear_ratio = 1.35
+        self.activate_abs_dx = 0.06
+        self.activate_abs_dy = 0.06
+        self.clear_abs_dx = 0.022
+        self.clear_abs_dy = 0.03
+
+        # Arrow endpoint smoothing (larger alpha => smoother, slower).
+        self.overlay_alpha_cur = 0.75
+        self.overlay_alpha_tgt = 0.88
+
+        # Temporal phase alignment: compare user's recent motion window to all
+        # possible reference windows and pick best matching phase.
+        self.align_window_ms = 1000
+        self.align_len = int(min(15, max(6, self.ref_features_scaled.shape[0] // 10)))
+        self.user_feature_hist: deque[tuple[int, np.ndarray]] = deque(maxlen=240)
+        self.ref_windows = self._build_ref_windows(self.align_len)
+        self.ref_idx_recent: deque[int] = deque(maxlen=3)  # median filter, zero systematic lag
+
+    def _scale_feature(self, feat: np.ndarray) -> np.ndarray:
+        return (feat - self.feat_mean) / self.feat_std
+
+    def _build_ref_windows(self, win_len: int) -> np.ndarray:
+        n = self.ref_features_scaled.shape[0]
+        if n <= win_len:
+            return self.ref_features_scaled[None, :, :]
+        return np.stack([self.ref_features_scaled[i : i + win_len] for i in range(n - win_len + 1)], axis=0)
+
+    def _resample_sequence(self, seq: np.ndarray, out_len: int) -> np.ndarray:
+        if seq.shape[0] == out_len:
+            return seq
+        if seq.shape[0] <= 1:
+            return np.repeat(seq[:1], out_len, axis=0)
+
+        src_idx = np.linspace(0, seq.shape[0] - 1, out_len)
+        left = np.floor(src_idx).astype(np.int32)
+        right = np.ceil(src_idx).astype(np.int32)
+        alpha = (src_idx - left).astype(np.float32)[:, None]
+        return (1.0 - alpha) * seq[left] + alpha * seq[right]
+
+    def _single_frame_match(self, feat_scaled: np.ndarray) -> tuple[int, float]:
+        d = np.linalg.norm(self.ref_features_scaled - feat_scaled[None, :], axis=1)
+        idx = int(np.argmin(d))
+        return idx, float(d[idx])
+
+    def _temporal_match_reference(self, ts_ms: int, feat_scaled: np.ndarray) -> tuple[int, float]:
+        self.user_feature_hist.append((int(ts_ms), feat_scaled.astype(np.float32)))
+        cutoff = ts_ms - self.align_window_ms
+        recent = [f for t, f in self.user_feature_hist if t >= cutoff]
+
+        if len(recent) < 4:
+            return self._single_frame_match(feat_scaled)
+
+        user_seq = np.stack(recent, axis=0).astype(np.float32)
+        user_seq = self._resample_sequence(user_seq, self.align_len)
+
+        # Mean squared error over all candidate windows.
+        diff = self.ref_windows - user_seq[None, :, :]
+        mse = np.mean(diff * diff, axis=(1, 2))
+
+        # Small continuity bias to avoid phase flicker frame-to-frame.
+        if self.ref_idx_recent and self.ref_windows.shape[0] > 1:
+            prev_idx = float(self.ref_idx_recent[-1])
+            starts = np.arange(self.ref_windows.shape[0], dtype=np.float32)
+            end_idxs = starts + (self.align_len - 1)
+            continuity = np.abs(end_idxs - prev_idx)
+            mse = mse + (0.0008 * continuity)
+
+        best_start = int(np.argmin(mse))
+        raw_idx = int(min(best_start + self.align_len - 1, self.ref_features_scaled.shape[0] - 1))
+
+        # Median filter (window=3): zero systematic lag, smooths single-frame outliers.
+        self.ref_idx_recent.append(raw_idx)
+        matched_idx = int(np.median(list(self.ref_idx_recent)))
+        matched_idx = max(0, min(matched_idx, self.ref_features_scaled.shape[0] - 1))
+
+        frame_dist = float(np.linalg.norm(self.ref_features_scaled[matched_idx] - feat_scaled))
+        return matched_idx, frame_dist
+
+    def _quality_from_distance(self, d: float) -> float:
+        p50 = float(self.dist_cal["p50"])
+        p99 = float(self.dist_cal["p99"])
+        denom = max(1e-6, p99 - p50)
+        quality = 1.0 - ((d - p50) / denom)
+        return float(np.clip(quality, 0.0, 1.0))
+
+    def _severity_from_ratio(self, r: float) -> str:
+        if r >= 2.0:
+            return "high"
+        if r >= 1.35:
+            return "medium"
+        return "low"
+
+    def _correction_message(self, side: str, part: str, direction: str, magnitude: str) -> str:
+        phrase_mag = {
+            "small": "slightly",
+            "medium": "",
+            "large": "more",
+        }[magnitude]
+
+        if phrase_mag:
+            return f"Move your {side} {part} {direction} {phrase_mag}.".replace("  ", " ")
+        return f"Move your {side} {part} {direction}."
+
+    def _body_to_image_xy(self, frame_info: dict[str, np.ndarray], body_xy: np.ndarray) -> np.ndarray:
+        pelvis = frame_info["pelvis"]
+        x_axis = frame_info["x_axis"]
+        y_axis = frame_info["y_axis"]
+        scale = float(frame_info["scale"][0])
+        return pelvis + (float(body_xy[0]) * scale) * x_axis + (float(body_xy[1]) * scale) * y_axis
+
+    def _dominant_direction(self, dx: float, dy: float, ratio_x: float, ratio_y: float) -> str:
+        directions = []
+        if ratio_x >= 1.1:
+            directions.append("right" if dx > 0 else "left")
+        if ratio_y >= 1.1:
+            directions.append("down" if dy > 0 else "up")
+
+        if not directions:
+            if abs(dx) >= abs(dy):
+                return "right" if dx > 0 else "left"
+            return "down" if dy > 0 else "up"
+
+        return " and ".join(directions[:2])
+
+    def _smooth_overlay_points(
+        self, correction_id: str, cur_xy_img: np.ndarray, target_xy_img: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        prev = self.overlay_state.get(correction_id)
+        cur = cur_xy_img.astype(np.float32)
+        tgt = target_xy_img.astype(np.float32)
+        if prev is None:
+            self.overlay_state[correction_id] = {"cur": cur, "tgt": tgt}
+            return cur, tgt
+
+        cur_s = self.overlay_alpha_cur * prev["cur"] + (1.0 - self.overlay_alpha_cur) * cur
+        tgt_s = self.overlay_alpha_tgt * prev["tgt"] + (1.0 - self.overlay_alpha_tgt) * tgt
+        self.overlay_state[correction_id] = {"cur": cur_s, "tgt": tgt_s}
+        return cur_s, tgt_s
+
+    def _phase(self, ref_idx: int) -> str:
+        t = ref_idx / max(1, self.ref_norm.shape[0] - 1)
+        if t < 0.2:
+            return "setup"
+        if t < 0.45:
+            return "descending"
+        if t < 0.6:
+            return "bottom"
+        if t < 0.85:
+            return "ascending"
+        return "top"
+
+    def _update_reps(self, knee_avg: float) -> None:
+        self.knee_hist.append(knee_avg)
+        k = moving_average(list(self.knee_hist), 5)
+        if self.rep_state == "standing" and k < 125:
+            self.rep_state = "down"
+        elif self.rep_state == "down" and k > 160:
+            self.rep_state = "standing"
+            self.rep_count += 1
+
+    def infer(self, landmarks_xyzw: np.ndarray, ts_ms: int) -> dict[str, Any]:
+        norm, frame_info = normalize_to_body_frame(landmarks_xyzw)
+        feat = feature_vector(norm, self.feature_landmarks)
+        feat_scaled = self._scale_feature(feat)
+
+        # Phase alignment: temporal window match identifies WHICH reference frame
+        # the user is at (answers "where in the exercise are you?").
+        ref_idx, matched_dist = self._temporal_match_reference(ts_ms, feat_scaled)
+
+        # Quality: nearest-neighbor distance across ALL reference frames
+        # (answers "how good is your overall form?" independent of phase timing).
+        _, nn_dist = self._single_frame_match(feat_scaled)
+        quality = self._quality_from_distance(nn_dist)
+        self.quality_hist.append(quality)
+        quality_smooth = moving_average(list(self.quality_hist), 8)
+
+        left_knee, right_knee, knee_avg = knee_angles_deg(norm)
+        self._update_reps(knee_avg)
+
+        ref_live = self.ref_norm[ref_idx]
+        corrections: list[dict[str, Any]] = []
+
+        active_ids_now: set[str] = set()
+
+        for idx in self.correction_landmarks:
+            lm_vis = float(landmarks_xyzw[idx, 3])
+            side = self.tol[idx]["side"]
+            part = self.tol[idx]["part"]
+            correction_id = f"{side.upper()}_{part.upper()}_{idx}"
+
+            # Do not generate correction vectors when that appendage landmark is not reliably detected.
+            if lm_vis < 0.55:
+                self.active_corrections[correction_id] = False
+                self.activate_streak[correction_id] = 0
+                self.clear_streak[correction_id] = 0
+                self.correction_target_lock.pop(correction_id, None)
+                continue
+
+            # Use LIVE reference for activation detection (is there a problem?)
+            cur_x = float(norm[idx, 0])
+            cur_y = float(norm[idx, 1])
+            ref_x = float(ref_live[idx, 0])
+            ref_y = float(ref_live[idx, 1])
+            dx = cur_x - ref_x
+            dy = cur_y - ref_y
+            tol_x = float(self.tol[idx]["x"])
+            tol_y = float(self.tol[idx]["y"])
+            ratio_x = abs(dx) / max(tol_x, 1e-6)
+            ratio_y = abs(dy) / max(tol_y, 1e-6)
+            err_ratio = max(ratio_x, ratio_y)
+
+            was_active = self.active_corrections.get(correction_id, False)
+            should_activate = (
+                err_ratio >= self.activate_ratio
+                and (abs(dx) >= self.activate_abs_dx or abs(dy) >= self.activate_abs_dy)
+            )
+            should_clear = (
+                err_ratio <= self.clear_ratio
+                or (abs(dx) <= self.clear_abs_dx and abs(dy) <= self.clear_abs_dy)
+            )
+
+            if should_activate:
+                self.activate_streak[correction_id] = self.activate_streak.get(correction_id, 0) + 1
+            else:
+                self.activate_streak[correction_id] = 0
+
+            if should_clear:
+                self.clear_streak[correction_id] = self.clear_streak.get(correction_id, 0) + 1
+            else:
+                self.clear_streak[correction_id] = 0
+
+            if was_active:
+                is_active = self.clear_streak[correction_id] < 2
+            else:
+                is_active = self.activate_streak[correction_id] >= 3
+            self.active_corrections[correction_id] = is_active
+
+            if not is_active:
+                # Correction cleared — release the target lock.
+                self.correction_target_lock.pop(correction_id, None)
+                continue
+
+            # --- Target locking: give user a STABLE target to move toward ---
+            # On first activation, lock the current ref_idx as the target.
+            locked_idx = self.correction_target_lock.get(correction_id)
+            if locked_idx is None:
+                # New correction — lock the target frame.
+                self.correction_target_lock[correction_id] = ref_idx
+                locked_idx = ref_idx
+            else:
+                # Release lock if user has moved far past the locked phase
+                # (they moved on to a different part of the exercise).
+                phase_drift = abs(ref_idx - locked_idx)
+                if phase_drift > self.lock_max_phase_drift:
+                    self.correction_target_lock[correction_id] = ref_idx
+                    locked_idx = ref_idx
+
+            # Use the LOCKED reference frame for correction vectors (stable target).
+            ref_locked = self.ref_norm[locked_idx]
+            ref_x = float(ref_locked[idx, 0])
+            ref_y = float(ref_locked[idx, 1])
+            dx = cur_x - ref_x
+            dy = cur_y - ref_y
+            ratio_x = abs(dx) / max(tol_x, 1e-6)
+            ratio_y = abs(dy) / max(tol_y, 1e-6)
+            err_ratio = max(ratio_x, ratio_y)
+
+            # Re-check clear against locked target — clear if user reached the locked target.
+            locked_clear = (
+                err_ratio <= self.clear_ratio
+                or (abs(dx) <= self.clear_abs_dx and abs(dy) <= self.clear_abs_dy)
+            )
+            if locked_clear:
+                self.clear_streak[correction_id] = self.clear_streak.get(correction_id, 0) + 1
+                if self.clear_streak[correction_id] >= 2:
+                    self.active_corrections[correction_id] = False
+                    self.correction_target_lock.pop(correction_id, None)
+                    continue
+
+            # If overall pose already matches the reference very well,
+            # suppress medium-ish residual deltas to avoid pedantic coaching.
+            if quality_smooth > 0.96 and err_ratio < 3.0:
+                continue
+            active_ids_now.add(correction_id)
+
+            direction = self._dominant_direction(dx, dy, ratio_x, ratio_y)
+
+            mag = "small"
+            if err_ratio >= 2.0:
+                mag = "large"
+            elif err_ratio >= 1.35:
+                mag = "medium"
+
+            target_xy_img = self._body_to_image_xy(frame_info, ref_locked[idx, :2])
+            cur_xy_img = landmarks_xyzw[idx, :2]
+            cur_xy_img_s, target_xy_img_s = self._smooth_overlay_points(
+                correction_id, cur_xy_img, target_xy_img
+            )
+
+            correction = {
+                "id": correction_id,
+                "severity": self._severity_from_ratio(err_ratio),
+                "side": side,
+                "part": part,
+                "landmark_visibility": round(lm_vis, 3),
+                "target": {
+                    "delta_x_body": round(float(-dx), 4),
+                    "delta_y_body": round(float(-dy), 4),
+                    "units": "body_norm",
+                },
+                "why": {
+                    "metric": "body_frame_position_error",
+                    "current_x": round(cur_x, 4),
+                    "target_x": round(ref_x, 4),
+                    "delta_x": round(dx, 4),
+                    "tol_x": round(tol_x, 4),
+                    "current_y": round(cur_y, 4),
+                    "target_y": round(ref_y, 4),
+                    "delta_y": round(dy, 4),
+                    "tol_y": round(tol_y, 4),
+                    "ratio_x": round(ratio_x, 3),
+                    "ratio_y": round(ratio_y, 3),
+                    "ratio": round(float(err_ratio), 3),
+                },
+                "why_text": (
+                    f"x {cur_x:+.2f}->{ref_x:+.2f} (tol {tol_x:.2f}), "
+                    f"y {cur_y:+.2f}->{ref_y:+.2f} (tol {tol_y:.2f}), "
+                    f"ratio {err_ratio:.2f}x"
+                ),
+                "ui": {
+                    "landmark_index": int(idx),
+                    "current_xy_norm": [round(float(cur_xy_img_s[0]), 4), round(float(cur_xy_img_s[1]), 4)],
+                    "target_xy_norm": [round(float(target_xy_img_s[0]), 4), round(float(target_xy_img_s[1]), 4)],
+                },
+                "text": self._correction_message(side, part, direction, mag),
+                "error_ratio": round(float(err_ratio), 3),
+            }
+            corrections.append(correction)
+
+        # Drop stale smoothing tracks when a correction is inactive.
+        stale_ids = [k for k in self.overlay_state if k not in active_ids_now]
+        for sid in stale_ids:
+            self.overlay_state.pop(sid, None)
+
+        corrections.sort(key=lambda c: c["error_ratio"], reverse=True)
+
+        visibility = float(np.mean(landmarks_xyzw[[11, 12, 23, 24, 25, 26, 27, 28], 3]))
+
+        speech = {
+            "should_speak": False,
+            "text": "",
+            "cooldown_ms": 5000,
+        }
+
+        if corrections:
+            top = corrections[0]
+            msg = top["text"]
+            should_voice = top.get("severity") in {"medium", "high"}
+            if should_voice and ((msg != self.last_spoken_message) or (ts_ms - self.last_message_ts_ms > 5000)):
+                speech["should_speak"] = True
+                speech["text"] = msg
+                self.last_spoken_message = msg
+                self.last_message_ts_ms = ts_ms
+
+        payload = {
+            "ts_ms": int(ts_ms),
+            "exercise": {
+                "name": self.meta.get("exercise_name", "squat"),
+                "display_name": self.meta.get("exercise_display_name", self.meta.get("exercise_name", "squat")),
+                "phase": self._phase(ref_idx),
+                "rep": int(self.rep_count),
+                "reference_frame": int(ref_idx),
+            },
+            "alignment": {
+                "method": "temporal_window_mse",
+                "window_ms": int(self.align_window_ms),
+                "window_samples": int(self.align_len),
+                "temporal_distance": round(float(matched_dist), 4),
+            },
+            "quality": {
+                "score": round(float(quality_smooth), 3),
+                "confidence": round(float(np.clip(visibility, 0.0, 1.0)), 3),
+                "distance": round(float(nn_dist), 4),
+            },
+            "measurements": {
+                "left_knee_angle_deg": round(float(left_knee), 1),
+                "right_knee_angle_deg": round(float(right_knee), 1),
+                "avg_knee_angle_deg": round(float(knee_avg), 1),
+                "left_foot_x_body": round(float(norm[LANDMARK_INDEX["left_foot_index"], 0]), 3),
+                "right_foot_x_body": round(float(norm[LANDMARK_INDEX["right_foot_index"], 0]), 3),
+            },
+            "corrections": corrections,
+            "speech": speech,
+        }
+
+        # Safety reminder only when tracking confidence is poor, not when form differs from reference.
+        if visibility < 0.35 and not corrections:
+            payload["corrections"].append(
+                {
+                    "id": "POSE_NOT_CLEAR",
+                    "severity": "low",
+                    "text": "Move fully into frame and face the camera.",
+                }
+            )
+
+        return payload
+
+
+class Replayer:
+    def __init__(self, reference_json: Path):
+        self.data = load_reference_json(reference_json)
+        self.frames = self.data["frames"]
+        self.fps = float(self.data.get("fps", 15.0))
+        self.i = 0
+
+    def next_landmarks(self) -> np.ndarray | None:
+        if not self.frames:
+            return None
+        frame = self.frames[self.i % len(self.frames)]
+        self.i += 1
+        return landmarks_list_to_np(frame["landmarks"])
+
+    def simulated_ts_ms(self) -> int:
+        """Return a simulated timestamp based on frame index and reference FPS."""
+        return int(self.i * (1000.0 / self.fps))
+
+
+class ReferenceDemoLoop:
+    def __init__(self, reference_json: Path):
+        data = load_reference_json(reference_json)
+        self.fps = float(data.get("fps", 15.0))
+        self.frames = [landmarks_list_to_np(f["landmarks"]) for f in data.get("frames", [])]
+        self.play_idx = float(len(self.frames) * 0.35) if self.frames else 0.0
+        self.last_ts_ms: int | None = None
+        self.last_snap_ts_ms = -10_000
+        self.snap_flash_until_ms = 0
+        self.notice_until_ms = 0
+        self.notice_text = ""
+        self.snap_cooldown_ms = 450
+        self.min_snap_jump_frames = 5
+
+    def _cyclic_distance(self, a: float, b: int) -> float:
+        if not self.frames:
+            return 0.0
+        n = float(len(self.frames))
+        d = abs(a - float(b))
+        return min(d, n - d)
+
+    def update(
+        self,
+        ts_ms: int,
+        suggested_idx: int | None = None,
+        suggested_distance: float | None = None,
+        snap_threshold: float = 1.5,
+    ) -> dict[str, Any]:
+        if not self.frames:
+            return {
+                "landmarks": None,
+                "frame_idx": -1,
+                "flash_strength": 0.0,
+                "flash_pulse": 0.0,
+                "notice": "",
+                "snapped": False,
+            }
+
+        if self.last_ts_ms is None:
+            self.last_ts_ms = int(ts_ms)
+
+        dt_s = max(0.0, (ts_ms - self.last_ts_ms) / 1000.0)
+        self.last_ts_ms = int(ts_ms)
+        self.play_idx = (self.play_idx + dt_s * self.fps) % len(self.frames)
+
+        snapped = False
+        if suggested_idx is not None and suggested_idx >= 0 and suggested_distance is not None:
+            jump = self._cyclic_distance(self.play_idx, suggested_idx)
+            within_threshold = float(suggested_distance) <= float(snap_threshold)
+            cooldown_done = (ts_ms - self.last_snap_ts_ms) >= self.snap_cooldown_ms
+            if within_threshold and cooldown_done and jump >= self.min_snap_jump_frames:
+                self.play_idx = float(suggested_idx % len(self.frames))
+                self.last_snap_ts_ms = int(ts_ms)
+                self.snap_flash_until_ms = int(ts_ms + 1000)
+                self.notice_until_ms = int(ts_ms + 2200)
+                self.notice_text = (
+                    f"Temporal alignment snap -> frame {int(self.play_idx)} "
+                    f"(dist {float(suggested_distance):.2f} <= {float(snap_threshold):.2f})"
+                )
+                snapped = True
+
+        idx = int(round(self.play_idx)) % len(self.frames)
+
+        flash_strength = 0.0
+        flash_pulse = 0.0
+        if ts_ms <= self.snap_flash_until_ms:
+            remaining = max(0.0, (self.snap_flash_until_ms - ts_ms) / 1000.0)
+            # Fade-out pulsing flash.
+            flash_strength = float(min(1.0, remaining * 2.0))
+            phase = (ts_ms - self.last_snap_ts_ms) / 140.0
+            flash_pulse = 0.5 + 0.5 * math.sin(2.0 * math.pi * phase)
+
+        notice = self.notice_text if ts_ms <= self.notice_until_ms else ""
+        return {
+            "landmarks": self.frames[idx],
+            "frame_idx": idx,
+            "flash_strength": flash_strength,
+            "flash_pulse": flash_pulse,
+            "notice": notice,
+            "snapped": snapped,
+        }
+
+
+def _project_landmarks_to_box(
+    landmarks_xyzw: np.ndarray, x0: int, y0: int, bw: int, bh: int
+) -> tuple[list[tuple[int, int]], np.ndarray]:
+    vis = landmarks_xyzw[:, 3] > 0.2
+    coords = landmarks_xyzw[:, :2]
+    if np.sum(vis) < 4:
+        vis = np.ones((coords.shape[0],), dtype=bool)
+
+    valid = coords[vis]
+    min_xy = valid.min(axis=0)
+    max_xy = valid.max(axis=0)
+    center = (min_xy + max_xy) * 0.5
+    span = float(max(max_xy[0] - min_xy[0], max_xy[1] - min_xy[1], 0.25))
+
+    out_pts: list[tuple[int, int]] = []
+    for i in range(coords.shape[0]):
+        rel = (coords[i] - center) / span
+        px = int(x0 + (0.5 + 0.85 * rel[0]) * bw)
+        py = int(y0 + (0.5 + 0.85 * rel[1]) * bh)
+        out_pts.append((px, py))
+    return out_pts, vis
+
+
+def draw_demo_wireframe_loop(
+    frame: np.ndarray,
+    demo_landmarks: np.ndarray | None,
+    loop_idx: int,
+    title: str,
+    flash_strength: float = 0.0,
+    flash_pulse: float = 0.0,
+    box_w: int = 250,
+    box_h: int = 250,
+) -> None:
+    if demo_landmarks is None:
+        return
+
+    h, w = frame.shape[:2]
+    x0 = max(10, w - box_w - 10)
+    y0 = 10
+    x1 = x0 + box_w
+    y1 = y0 + box_h
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x0, y0), (x1, y1), (28, 28, 34), -1)
+    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+
+    base = np.array([90.0, 120.0, 200.0], dtype=np.float32)
+    flash = np.array([120.0, 245.0, 170.0], dtype=np.float32)
+    border = (1.0 - flash_strength) * base + flash_strength * flash
+    border_color = tuple(int(v) for v in border.tolist())
+    thickness = 1 if flash_strength < 0.35 else 2
+    cv2.rectangle(frame, (x0, y0), (x1, y1), border_color, thickness)
+
+    pts, vis = _project_landmarks_to_box(demo_landmarks, x0, y0, box_w, box_h)
+    base_line = np.array([90.0, 220.0, 255.0], dtype=np.float32)
+    red_line = np.array([30.0, 30.0, 255.0], dtype=np.float32)
+    line_blend = float(np.clip(flash_strength * (0.45 + 0.55 * flash_pulse), 0.0, 1.0))
+    line_color_arr = (1.0 - line_blend) * base_line + line_blend * red_line
+    line_color = tuple(int(v) for v in line_color_arr.tolist())
+    line_thickness = 1 if line_blend < 0.35 else 2
+
+    for a, b in POSE_CONNECTIONS:
+        if a >= len(pts) or b >= len(pts):
+            continue
+        if not (vis[a] and vis[b]):
+            continue
+        cv2.line(frame, pts[a], pts[b], line_color, line_thickness, cv2.LINE_AA)
+
+    for i, p in enumerate(pts):
+        if i < len(vis) and not vis[i]:
+            continue
+        cv2.circle(frame, p, 2, (220, 255, 255), -1)
+
+    cv2.putText(
+        frame,
+        f"Demo Loop: {title}",
+        (x0 + 8, y0 + 18),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (230, 240, 255),
+        1,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        f"frame {loop_idx}",
+        (x0 + 8, y1 - 8),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.45,
+        (170, 180, 195),
+        1,
+        cv2.LINE_AA,
+    )
+
+
+def draw_pose_points(
+    frame: np.ndarray, landmarks_xyzw: np.ndarray, color=(40, 255, 120), mirror: bool = False
+) -> None:
+    h, w = frame.shape[:2]
+    for i in range(33):
+        x_norm = float(landmarks_xyzw[i, 0])
+        if mirror:
+            x_norm = 1.0 - x_norm
+        x = int(np.clip(x_norm, 0.0, 1.0) * (w - 1))
+        y = int(np.clip(landmarks_xyzw[i, 1], 0.0, 1.0) * (h - 1))
+        vis = float(landmarks_xyzw[i, 3])
+        if vis < 0.25:
+            continue
+        cv2.circle(frame, (x, y), 3, color, -1)
+
+
+def draw_correction_overlays(frame: np.ndarray, payload: dict[str, Any], mirror: bool = False) -> None:
+    h, w = frame.shape[:2]
+    severity_color = {
+        "low": (80, 190, 255),
+        "medium": (0, 190, 255),
+        "high": (40, 80, 255),
+    }
+
+    for corr in payload.get("corrections", []):
+        ui = corr.get("ui", {})
+        cur = ui.get("current_xy_norm")
+        tgt = ui.get("target_xy_norm")
+        if not cur or not tgt:
+            continue
+
+        x_cur = float(cur[0])
+        x_tgt = float(tgt[0])
+        if mirror:
+            x_cur = 1.0 - x_cur
+            x_tgt = 1.0 - x_tgt
+
+        p_cur = (
+            int(np.clip(x_cur, 0.0, 1.0) * (w - 1)),
+            int(np.clip(float(cur[1]), 0.0, 1.0) * (h - 1)),
+        )
+        p_tgt = (
+            int(np.clip(x_tgt, 0.0, 1.0) * (w - 1)),
+            int(np.clip(float(tgt[1]), 0.0, 1.0) * (h - 1)),
+        )
+
+        color = severity_color.get(corr.get("severity", "low"), (120, 220, 255))
+        ratio = float(corr.get("error_ratio", 1.0))
+        thickness = 2 if ratio < 1.8 else 3
+
+        cv2.arrowedLine(frame, p_cur, p_tgt, color, thickness, cv2.LINE_AA, tipLength=0.24)
+        cv2.circle(frame, p_cur, 6, color, 2)
+        cv2.drawMarker(frame, p_tgt, (255, 255, 255), cv2.MARKER_CROSS, 10, 1, cv2.LINE_AA)
+
+        label = f"{corr.get('side', '')} {corr.get('part', '')}".strip()
+        if label:
+            cv2.putText(
+                frame,
+                label,
+                (p_cur[0] + 8, p_cur[1] - 8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                color,
+                1,
+                cv2.LINE_AA,
+            )
+
+
+def render_panel(
+    frame: np.ndarray, payload: dict[str, Any], width: int = 410, alignment_notice: str = ""
+) -> np.ndarray:
+    h, w = frame.shape[:2]
+    panel = np.zeros((h, width, 3), dtype=np.uint8)
+    panel[:] = (18, 18, 22)
+
+    y = 35
+    line_h = 22
+
+    def write_line(text: str, color=(240, 240, 240), scale=0.62, thickness=1):
+        nonlocal y
+        cv2.putText(panel, text, (14, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
+        y += line_h
+
+    exercise_name = payload.get("exercise", {}).get("display_name", payload.get("exercise", {}).get("name", "exercise"))
+    write_line(f"PT Coach Demo ({exercise_name})", color=(120, 230, 255), scale=0.72, thickness=2)
+    write_line(f"Rep: {payload['exercise']['rep']}    Phase: {payload['exercise']['phase']}")
+    write_line(
+        f"Quality: {payload['quality']['score']:.2f}    Conf: {payload['quality']['confidence']:.2f}",
+        color=(180, 255, 180),
+    )
+    align = payload.get("alignment", {})
+    if align:
+        write_line(
+            f"Align: {align.get('method', '')} ({align.get('window_ms', 0)}ms/{align.get('window_samples', 0)}pts)",
+            color=(145, 160, 180),
+            scale=0.5,
+        )
+        if "temporal_distance" in align:
+            write_line(
+                f"tDist: {float(align.get('temporal_distance', 0.0)):.3f}  snap<= {float(align.get('snap_threshold', 0.0)):.3f}",
+                color=(140, 182, 148),
+                scale=0.5,
+            )
+
+    y += 8
+    cv2.line(panel, (12, y), (width - 12, y), (70, 70, 75), 1)
+    y += 28
+
+    corr = payload.get("corrections", [])
+    write_line("Live Coaching", color=(255, 210, 120), scale=0.68, thickness=2)
+    if corr:
+        hidden_count = 0
+        for i, item in enumerate(corr):
+            if y > h - 140:
+                hidden_count = len(corr) - i
+                break
+
+            sev = item.get("severity", "low").upper()
+            reason_color = (110, 215, 255) if i == 0 else (220, 220, 230)
+            write_line(f"{i+1}. [{sev}] {item.get('text', '')}", color=reason_color, scale=0.54, thickness=1)
+
+            why_text = item.get("why_text", "")
+            if why_text:
+                wrapped_why = textwrap.wrap(f"why: {why_text}", width=48)[:2]
+                for why_line in wrapped_why:
+                    if y > h - 130:
+                        break
+                    write_line(why_line, color=(175, 175, 185), scale=0.45, thickness=1)
+
+            y += 2
+
+        if hidden_count > 0:
+            write_line(f"+{hidden_count} more shown in JSON", color=(150, 150, 160), scale=0.5)
+    else:
+        write_line("Looking good. Keep going.", color=(190, 255, 190), scale=0.66, thickness=2)
+
+    y += 8
+    cv2.line(panel, (12, y), (width - 12, y), (70, 70, 75), 1)
+    y += 28
+
+    m = payload.get("measurements", {})
+    has_metrics = all(k in m for k in ("avg_knee_angle_deg", "left_foot_x_body", "right_foot_x_body"))
+    if has_metrics:
+        write_line(
+            f"Avg knee angle: {float(m['avg_knee_angle_deg']):.1f} deg",
+            color=(210, 220, 255),
+            scale=0.60,
+        )
+        write_line(
+            f"L/R foot x_body: {float(m['left_foot_x_body']):+.2f} / {float(m['right_foot_x_body']):+.2f}",
+            color=(210, 220, 255),
+            scale=0.56,
+        )
+    else:
+        write_line("Measurements: waiting for pose...", color=(210, 220, 255), scale=0.58)
+
+    if alignment_notice:
+        wrapped = textwrap.wrap(alignment_notice, width=43)[:3]
+        box_h = 24 + 18 * len(wrapped)
+        box_w = width - 24
+        bx0 = 12
+        by0 = h - box_h - 12
+        bx1 = bx0 + box_w
+        by1 = by0 + box_h
+        cv2.rectangle(panel, (bx0, by0), (bx1, by1), (42, 72, 48), -1)
+        cv2.rectangle(panel, (bx0, by0), (bx1, by1), (140, 255, 165), 1)
+        yy = by0 + 18
+        cv2.putText(
+            panel,
+            "Temporal Alignment",
+            (bx0 + 8, yy),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (205, 255, 220),
+            1,
+            cv2.LINE_AA,
+        )
+        yy += 17
+        for line in wrapped:
+            cv2.putText(
+                panel,
+                line,
+                (bx0 + 8, yy),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                (220, 240, 226),
+                1,
+                cv2.LINE_AA,
+            )
+            yy += 16
+
+    # Compose side-by-side output.
+    return np.concatenate([frame, panel], axis=1)
+
+
+def open_pose_landmarker(model_path: Path) -> PoseLandmarker:
+    return PoseLandmarker.create_from_options(
+        PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(model_path)),
+            running_mode=RunningMode.VIDEO,
+            num_poses=1,
+            min_pose_detection_confidence=0.5,
+            min_tracking_confidence=0.5,
+        )
+    )
+
+
+def open_camera_with_fallback(preferred_index: int) -> tuple[cv2.VideoCapture, int]:
+    """Open a camera robustly on macOS and return (capture, selected_index)."""
+
+    candidate_indices = []
+    for idx in [preferred_index, 0, 1, 2]:
+        if idx not in candidate_indices:
+            candidate_indices.append(idx)
+
+    for idx in candidate_indices:
+        cap = cv2.VideoCapture(idx, cv2.CAP_AVFOUNDATION)
+        if not cap.isOpened():
+            cap.release()
+            cap = cv2.VideoCapture(idx)
+        if not cap.isOpened():
+            cap.release()
+            continue
+
+        # Warm-up: some drivers need a few reads before first valid frame.
+        ok = False
+        for _ in range(20):
+            ret, _ = cap.read()
+            if ret:
+                ok = True
+                break
+            time.sleep(0.03)
+
+        if ok:
+            return cap, idx
+
+        cap.release()
+
+    raise RuntimeError(
+        "Cannot open any camera device (tried preferred index + 0/1/2). "
+        "Check macOS Camera permission for your terminal app."
+    )
+
+
+def ensure_parent(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Live PT coach demo")
+    parser.add_argument("--exercise", default="squat", choices=available_exercises())
+    parser.add_argument("--model", default="", help="Model .npz path (defaults to models/<exercise>_reference_model.npz)")
+    parser.add_argument(
+        "--metadata",
+        default="",
+        help="Model metadata path (defaults to models/<exercise>_reference_model.meta.json)",
+    )
+    parser.add_argument(
+        "--reference-json",
+        default="",
+        help="Reference landmark JSON for demo wireframe loop (defaults to data/raw/<exercise>_reference.json)",
+    )
+    parser.add_argument("--pose-model", default="models/pose_landmarker_heavy.task")
+    parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument("--mirror", action="store_true", help="Mirror display preview")
+    parser.add_argument("--json-out", default="outputs/live_state.json")
+    parser.add_argument("--source-json", default="", help="Replay landmark JSON instead of webcam")
+    parser.add_argument("--no-window", action="store_true", help="Disable OpenCV UI window")
+    parser.add_argument("--no-demo-loop", action="store_true", help="Disable looped reference wireframe overlay")
+    parser.add_argument(
+        "--align-snap-threshold",
+        type=float,
+        default=-1.0,
+        help="Temporal alignment distance threshold for snapping demo loop (-1 = auto)",
+    )
+    parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0=run forever)")
+    parser.add_argument("--print-every", type=int, default=10, help="Console print cadence in frames")
+    args = parser.parse_args()
+
+    spec = get_exercise_spec(args.exercise)
+    model_path = Path(args.model) if args.model else Path(f"models/{spec.key}_reference_model.npz")
+    metadata_path = (
+        Path(args.metadata) if args.metadata else Path(f"models/{spec.key}_reference_model.meta.json")
+    )
+    reference_json_path = (
+        Path(args.reference_json) if args.reference_json else Path(f"data/raw/{spec.key}_reference.json")
+    )
+    pose_model_path = Path(args.pose_model)
+    json_out_path = Path(args.json_out)
+
+    if not model_path.exists() or not metadata_path.exists():
+        raise FileNotFoundError(
+            "Model files not found. Run train_model.py first:\n"
+            f"  missing: {model_path} or {metadata_path}"
+        )
+
+    ensure_parent(json_out_path)
+
+    engine = PTCoachEngine(model_path, metadata_path)
+
+    cap = None
+    landmarker = None
+    replayer = None
+    demo_loop = None
+
+    if not args.no_demo_loop:
+        demo_source = Path(args.source_json) if args.source_json else reference_json_path
+        if demo_source.exists():
+            demo_loop = ReferenceDemoLoop(demo_source)
+            print(f"Demo loop source: {demo_source}")
+        else:
+            print(f"Demo loop source not found, skipping overlay: {demo_source}")
+
+    if args.align_snap_threshold > 0:
+        snap_threshold = float(args.align_snap_threshold)
+    else:
+        snap_threshold = float(engine.dist_cal.get("p90", 1.5)) * 1.1
+    print(f"Temporal snap threshold: {snap_threshold:.3f}")
+
+    if args.source_json:
+        replayer = Replayer(Path(args.source_json))
+        print(f"Replay mode from: {args.source_json}")
+    else:
+        if not pose_model_path.exists():
+            raise FileNotFoundError(f"Pose model missing: {pose_model_path}")
+        landmarker = open_pose_landmarker(pose_model_path)
+        cap, selected_cam = open_camera_with_fallback(args.camera)
+        print(f"Camera mode started (index={selected_cam})")
+
+    start_ts = time.time()
+    frame_count = 0
+
+    try:
+        while True:
+            frame = None
+            landmarks_xyzw = None
+            demo_state: dict[str, Any] | None = None
+            alignment_notice = ""
+
+            if replayer is not None:
+                landmarks_xyzw = replayer.next_landmarks()
+                if landmarks_xyzw is None:
+                    break
+                # Use simulated timestamps so temporal alignment sees correct frame spacing.
+                ts_ms = replayer.simulated_ts_ms()
+                frame = np.zeros((720, 960, 3), dtype=np.uint8)
+                draw_pose_points(frame, landmarks_xyzw, mirror=args.mirror)
+            else:
+                assert cap is not None and landmarker is not None
+                ts_ms = int(time.time() * 1000)
+                ret, raw = cap.read()
+                if not ret:
+                    print("Camera read failed; stopping.")
+                    break
+
+                rgb = cv2.cvtColor(raw, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+                result = landmarker.detect_for_video(mp_image, ts_ms)
+
+                frame = cv2.flip(raw, 1) if args.mirror else raw
+                if result.pose_landmarks and len(result.pose_landmarks) > 0:
+                    landmarks_xyzw = mediapipe_landmarks_to_np(result.pose_landmarks[0])
+                    draw_pose_points(frame, landmarks_xyzw, mirror=args.mirror)
+
+            if landmarks_xyzw is None:
+                payload = {
+                    "ts_ms": ts_ms,
+                    "exercise": {
+                        "name": spec.key,
+                        "display_name": spec.display_name,
+                        "phase": "setup",
+                        "rep": 0,
+                        "reference_frame": -1,
+                    },
+                    "alignment": {
+                        "method": "temporal_window_mse",
+                        "window_ms": int(engine.align_window_ms),
+                        "window_samples": int(engine.align_len),
+                    },
+                    "quality": {"score": 0.0, "confidence": 0.0},
+                    "measurements": {
+                        "left_knee_angle_deg": 0.0,
+                        "right_knee_angle_deg": 0.0,
+                        "avg_knee_angle_deg": 0.0,
+                        "left_foot_x_body": 0.0,
+                        "right_foot_x_body": 0.0,
+                    },
+                    "corrections": [
+                        {
+                            "id": "NO_POSE",
+                            "severity": "low",
+                            "text": "No pose detected. Step into frame.",
+                        }
+                    ],
+                    "speech": {"should_speak": False, "cooldown_ms": 5000},
+                }
+            else:
+                payload = engine.infer(landmarks_xyzw, ts_ms)
+
+            if demo_loop is not None:
+                align_info = payload.get("alignment", {})
+                suggested_idx = int(payload.get("exercise", {}).get("reference_frame", -1))
+                suggested_dist_val = align_info.get("temporal_distance")
+                suggested_dist = float(suggested_dist_val) if suggested_dist_val is not None else None
+                demo_state = demo_loop.update(
+                    ts_ms,
+                    suggested_idx=suggested_idx,
+                    suggested_distance=suggested_dist,
+                    snap_threshold=snap_threshold,
+                )
+                payload.setdefault("alignment", {})
+                payload["alignment"]["snap_threshold"] = round(float(snap_threshold), 4)
+                payload["alignment"]["demo_loop_frame"] = int(demo_state["frame_idx"])
+                payload["alignment"]["demo_snapped"] = bool(demo_state["snapped"])
+                if demo_state.get("notice"):
+                    payload["alignment"]["notice"] = str(demo_state["notice"])
+                alignment_notice = str(demo_state.get("notice", ""))
+                if demo_state.get("snapped"):
+                    print(f"[align] {alignment_notice}")
+
+            json_out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+            if args.print_every > 0 and frame_count % args.print_every == 0:
+                top_msg = payload["corrections"][0]["text"] if payload.get("corrections") else "Looking good"
+                print(
+                    f"frame={frame_count:04d} rep={payload['exercise']['rep']} "
+                    f"quality={payload['quality']['score']:.2f} msg={top_msg}"
+                )
+
+            if not args.no_window:
+                if demo_state is not None:
+                    draw_demo_wireframe_loop(
+                        frame,
+                        demo_state.get("landmarks"),
+                        int(demo_state.get("frame_idx", -1)),
+                        payload["exercise"].get("display_name", spec.display_name),
+                        flash_strength=float(demo_state.get("flash_strength", 0.0)),
+                        flash_pulse=float(demo_state.get("flash_pulse", 0.0)),
+                    )
+                draw_correction_overlays(frame, payload, mirror=args.mirror)
+                composed = render_panel(frame, payload, alignment_notice=alignment_notice)
+                cv2.imshow("PT Coach Live Demo", composed)
+                key = cv2.waitKey(1) & 0xFF
+                if key in (ord("q"), 27):
+                    break
+
+            frame_count += 1
+            if args.max_frames > 0 and frame_count >= args.max_frames:
+                break
+
+    finally:
+        if cap is not None:
+            cap.release()
+        if landmarker is not None:
+            landmarker.close()
+        if not args.no_window:
+            cv2.destroyAllWindows()
+
+    elapsed = max(1e-6, time.time() - start_ts)
+    fps = frame_count / elapsed
+    print(f"Finished. Frames={frame_count}, elapsed={elapsed:.2f}s, approx_fps={fps:.1f}")
+    print(f"Live JSON output: {json_out_path}")
+
+
+if __name__ == "__main__":
+    main()
