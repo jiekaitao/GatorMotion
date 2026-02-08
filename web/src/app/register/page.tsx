@@ -42,93 +42,114 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100vh", paddingBottom: "var(--space-2xl)" }}>
-      <div className="animate-in" style={{ marginBottom: "var(--space-xl)", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Image src="/gatormove-logo.png" alt="GatorMove" width={1536} height={1024} style={{ height: "80px", width: "auto" }} priority />
-        <h1 style={{ marginTop: "var(--space-md)", fontSize: "var(--text-display)", fontWeight: 800 }}>Create Account</h1>
-        <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
-          Join GatorMove and start your recovery journey
-        </p>
+    <div className="login-page">
+      <div className="login-bg-shape login-bg-shape-1" />
+      <div className="login-bg-shape login-bg-shape-2" />
+
+      <div className="login-container">
+        {/* Hero */}
+        <div className="login-hero animate-in">
+          <div className="login-logo-ring">
+            <Image
+              src="/gatormotion-icon.png"
+              alt="GatorMotion"
+              width={217}
+              height={128}
+              style={{ height: "56px", width: "auto" }}
+              priority
+            />
+          </div>
+          <h1 className="login-title">Join GatorMotion</h1>
+          <p className="login-subtitle">Start your recovery journey today</p>
+        </div>
+
+        {/* Register card */}
+        <div className="login-card animate-in" style={{ animationDelay: "80ms" }}>
+          <h2 className="login-card-title">Create Account</h2>
+
+          <form onSubmit={handleSubmit} className="login-form">
+            <div className="login-field">
+              <label className="login-label" htmlFor="name">Full Name</label>
+              <input
+                id="name"
+                type="text"
+                className="login-input"
+                placeholder="Jane Doe"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoComplete="name"
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="login-label" htmlFor="reg-email">Email</label>
+              <input
+                id="reg-email"
+                type="email"
+                className="login-input"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="login-label" htmlFor="reg-password">Password</label>
+              <input
+                id="reg-password"
+                type="password"
+                className="login-input"
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="login-label">I am a</label>
+              <div style={{ display: "flex", gap: "var(--space-sm)" }}>
+                <button
+                  type="button"
+                  onClick={() => setRole("patient")}
+                  className="login-role-btn"
+                  data-active={role === "patient"}
+                >
+                  Patient
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRole("therapist")}
+                  className="login-role-btn"
+                  data-active={role === "therapist"}
+                >
+                  Therapist
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="login-error">
+                <p>{error}</p>
+              </div>
+            )}
+
+            <button type="submit" className="login-btn" disabled={loading}>
+              {loading ? "Creating account..." : "Sign up"}
+            </button>
+          </form>
+
+          <p className="login-footer">
+            Already have an account?{" "}
+            <Link href="/login" className="login-link">Log in</Link>
+          </p>
+        </div>
       </div>
-
-      <form onSubmit={handleSubmit} className="stack stack-md animate-in" style={{ animationDelay: "60ms" }}>
-        <div>
-          <label className="input-label" htmlFor="name">Full Name</label>
-          <input
-            id="name"
-            type="text"
-            className="input"
-            placeholder="Jane Doe"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="input-label" htmlFor="reg-email">Email</label>
-          <input
-            id="reg-email"
-            type="email"
-            className="input"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="input-label" htmlFor="reg-password">Password</label>
-          <input
-            id="reg-password"
-            type="password"
-            className="input"
-            placeholder="At least 6 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
-        </div>
-
-        <div>
-          <label className="input-label">I am a</label>
-          <div className="row" style={{ gap: "var(--space-sm)" }}>
-            <button
-              type="button"
-              onClick={() => setRole("patient")}
-              className={`btn ${role === "patient" ? "btn-primary" : "btn-secondary"}`}
-              style={{ flex: 1 }}
-            >
-              Patient
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole("therapist")}
-              className={`btn ${role === "therapist" ? "btn-blue" : "btn-secondary"}`}
-              style={{ flex: 1 }}
-            >
-              Therapist
-            </button>
-          </div>
-        </div>
-
-        {error && (
-          <div className="card" style={{ backgroundColor: "var(--color-red-light)", border: "2px solid var(--color-red)", padding: "12px 16px" }}>
-            <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600 }}>{error}</p>
-          </div>
-        )}
-
-        <button type="submit" className="btn btn-primary btn-full" disabled={loading} style={{ marginTop: "var(--space-sm)" }}>
-          {loading ? "Creating account..." : "Sign up"}
-        </button>
-
-        <p className="text-center text-small" style={{ marginTop: "var(--space-md)" }}>
-          Already have an account?{" "}
-          <Link href="/login" style={{ fontWeight: 700 }}>Log in</Link>
-        </p>
-      </form>
     </div>
   );
 }

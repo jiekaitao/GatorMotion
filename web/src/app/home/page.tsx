@@ -13,9 +13,6 @@ import {
   Dumbbell,
   Timer,
   Star,
-  Flame,
-  Award,
-  TrendingUp,
   MessageCircle,
   User,
 } from "lucide-react";
@@ -36,13 +33,6 @@ interface Assignment {
   date: string;
 }
 
-interface StreakData {
-  currentStreak: number;
-  longestStreak: number;
-  lastCompletedDate: string | null;
-  history: string[];
-}
-
 interface Conversation {
   partnerId: string;
   partnerName: string;
@@ -60,16 +50,14 @@ export default function HomePage() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [meRes, assignRes, streakRes, msgRes] = await Promise.all([
+      const [meRes, assignRes, msgRes] = await Promise.all([
         fetch("/api/auth/me"),
         fetch("/api/assignments?view=today"),
-        fetch("/api/streaks"),
         fetch("/api/messages"),
       ]);
 
@@ -80,10 +68,6 @@ export default function HomePage() {
 
       const meData = await meRes.json();
       const assignData = await assignRes.json();
-      if (streakRes.ok) {
-        const sData = await streakRes.json();
-        setStreakData(sData.streak);
-      }
       if (msgRes.ok) {
         const msgData = await msgRes.json();
         setConversations(msgData.conversations || []);
@@ -151,7 +135,7 @@ export default function HomePage() {
 
   return (
     <>
-      <div className="page" style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
+      <div className="page">
 
         {/* ── Daily Progress Hero Card ── */}
         {totalCount > 0 && <section
@@ -236,6 +220,9 @@ export default function HomePage() {
             }}
           />
         </section>}
+
+        {/* ── Two-Column Dashboard Grid ── */}
+        <div className="home-grid" style={{ marginTop: "var(--space-xl)" }}>
 
         {/* ── Today's Plan Section ── */}
         <section>
@@ -477,86 +464,21 @@ export default function HomePage() {
                   No exercises assigned yet.
                 </p>
                 <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
-                  Ask your therapist or use the Dev panel to add exercises.
+                  We&apos;re waiting on your therapist to assign exercises.
                 </p>
               </div>
             )}
           </div>
         </section>
 
-        {/* ── Streak & Progress Section ── */}
-        {streakData && (
-          <section>
-            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Your Progress</h3>
-
-            {/* Stats Row */}
-            <div className="row" style={{ gap: "var(--space-md)", marginBottom: "var(--space-lg)" }}>
-              <div className="card animate-in" style={{ flex: 1, textAlign: "center", animationDelay: "300ms" }}>
-                <Flame size={24} color={streakData.currentStreak > 0 ? "var(--color-orange)" : "var(--color-gray-300)"} fill={streakData.currentStreak > 0 ? "var(--color-orange)" : "none"} />
-                <div style={{ marginTop: "4px", fontSize: "24px", fontWeight: 800 }}>
-                  {streakData.currentStreak}
-                </div>
-                <div className="text-small">Current</div>
-              </div>
-              <div className="card animate-in" style={{ flex: 1, textAlign: "center", animationDelay: "360ms" }}>
-                <Award size={24} color="var(--color-primary)" />
-                <div style={{ marginTop: "4px", fontSize: "24px", fontWeight: 800 }}>
-                  {streakData.longestStreak}
-                </div>
-                <div className="text-small">Longest</div>
-              </div>
-              <div className="card animate-in" style={{ flex: 1, textAlign: "center", animationDelay: "420ms" }}>
-                <TrendingUp size={24} color="var(--color-blue)" />
-                <div style={{ marginTop: "4px", fontSize: "24px", fontWeight: 800 }}>
-                  {streakData.history.length}
-                </div>
-                <div className="text-small">Total Days</div>
-              </div>
-            </div>
-
-            {/* 30-Day Calendar */}
-            <div className="animate-in" style={{ animationDelay: "480ms" }}>
-              <h4 style={{ marginBottom: "var(--space-md)", fontWeight: 700 }}>Last 30 Days</h4>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(7, 1fr)",
-                  gap: "6px",
-                }}
-              >
-                {(() => {
-                  const today = new Date();
-                  const days: { date: string; completed: boolean }[] = [];
-                  for (let i = 29; i >= 0; i--) {
-                    const d = new Date(today);
-                    d.setDate(d.getDate() - i);
-                    const dateStr = d.toISOString().split("T")[0];
-                    days.push({ date: dateStr, completed: streakData.history.includes(dateStr) });
-                  }
-                  return days.map(({ date, completed }) => (
-                    <div
-                      key={date}
-                      title={date}
-                      style={{
-                        aspectRatio: "1",
-                        borderRadius: "var(--radius-sm)",
-                        backgroundColor: completed
-                          ? "var(--color-green)"
-                          : "var(--color-gray-100)",
-                        transition: "background-color 0.2s ease",
-                      }}
-                    />
-                  ));
-                })()}
-              </div>
-            </div>
-          </section>
-        )}
+        {/* ── Right Column: Messages ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
 
         {/* ── Messages Section ── */}
         <section>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
-            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Messages</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-md)" }}>
+            <MessageCircle size={22} color="var(--color-primary)" />
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Conversations</h3>
           </div>
 
           {conversations.length > 0 ? (
@@ -641,6 +563,9 @@ export default function HomePage() {
             </div>
           )}
         </section>
+
+        </div>{/* end right column */}
+        </div>{/* end home-grid */}
       </div>
 
       {/* Fixed CTA */}

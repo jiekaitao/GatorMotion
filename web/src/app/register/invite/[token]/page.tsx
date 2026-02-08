@@ -88,7 +88,7 @@ export default function InviteRegisterPage({ params }: { params: Promise<{ token
         <div className="badge badge-blue" style={{ marginBottom: "var(--space-md)" }}>
           Invite from {therapistName}
         </div>
-        <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800 }}>Join GatorMove</h1>
+        <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800 }}>Join GatorMotion</h1>
         <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
           {therapistName} has invited you to track your physical therapy exercises.
         </p>

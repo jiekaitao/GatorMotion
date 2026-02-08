@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "GatorMove",
+  title: "GatorMotion",
   description: "Your physical therapy companion. Complete exercises, build streaks, recover stronger.",
   icons: {
     icon: [

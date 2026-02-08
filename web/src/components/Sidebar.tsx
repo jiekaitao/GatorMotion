@@ -37,8 +37,8 @@ export default function Sidebar() {
     <aside className="sidebar">
       {/* Logo */}
       <div className="sidebar-logo">
-        <Image src="/gatormove-icon.png" alt="GatorMove" width={217} height={128} style={{ height: "32px", width: "auto" }} />
-        <h1>GatorMove</h1>
+        <Image src="/gatormotion-icon.png" alt="GatorMotion" width={217} height={128} style={{ height: "32px", width: "auto" }} />
+        <h1>GatorMotion</h1>
       </div>
 
       {/* Nav Links */}

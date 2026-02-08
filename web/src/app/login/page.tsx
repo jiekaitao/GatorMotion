@@ -4,6 +4,7 @@ import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { Flame, Dumbbell, Shield } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,59 +41,94 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center", minHeight: "100vh", paddingBottom: "var(--space-2xl)" }}>
-      <div className="animate-in text-center" style={{ marginBottom: "var(--space-xl)", display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <Image src="/gatormove-logo.png" alt="GatorMove" width={1536} height={1024} style={{ height: "120px", width: "auto" }} priority />
-        <h1 style={{ marginTop: "var(--space-md)", fontSize: "var(--text-display)", fontWeight: 800 }}>
-          GatorMove
-        </h1>
-        <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
-          Your PT recovery companion
-        </p>
-      </div>
+    <div className="login-page">
+      {/* Decorative background shapes */}
+      <div className="login-bg-shape login-bg-shape-1" />
+      <div className="login-bg-shape login-bg-shape-2" />
 
-      <form onSubmit={handleSubmit} className="stack stack-md animate-in" style={{ animationDelay: "60ms" }}>
-        <div>
-          <label className="input-label" htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            className="input"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="input-label" htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            className="input"
-            placeholder="Your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </div>
-
-        {error && (
-          <div className="card" style={{ backgroundColor: "var(--color-red-light)", border: "2px solid var(--color-red)", padding: "12px 16px" }}>
-            <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600 }}>{error}</p>
+      <div className="login-container">
+        {/* Hero section */}
+        <div className="login-hero animate-in">
+          <div className="login-logo-ring">
+            <Image
+              src="/gatormotion-icon.png"
+              alt="GatorMotion"
+              width={217}
+              height={128}
+              style={{ height: "56px", width: "auto" }}
+              priority
+            />
           </div>
-        )}
+          <h1 className="login-title">GatorMotion</h1>
+          <p className="login-subtitle">Your PT recovery companion</p>
 
-        <button type="submit" className="btn btn-primary btn-full" disabled={loading} style={{ marginTop: "var(--space-sm)" }}>
-          {loading ? "Logging in..." : "Log in"}
-        </button>
+          {/* Feature pills */}
+          <div className="login-features">
+            <div className="login-pill">
+              <Flame size={14} color="var(--color-orange)" />
+              <span>Streaks</span>
+            </div>
+            <div className="login-pill">
+              <Dumbbell size={14} color="var(--color-blue)" />
+              <span>Guided PT</span>
+            </div>
+            <div className="login-pill">
+              <Shield size={14} color="var(--color-green)" />
+              <span>Therapist-led</span>
+            </div>
+          </div>
+        </div>
 
-        <p className="text-center text-small" style={{ marginTop: "var(--space-md)" }}>
-          Don&apos;t have an account?{" "}
-          <Link href="/register" style={{ fontWeight: 700 }}>Sign up</Link>
-        </p>
-      </form>
+        {/* Login card */}
+        <div className="login-card animate-in" style={{ animationDelay: "80ms" }}>
+          <h2 className="login-card-title">Welcome back</h2>
+
+          <form onSubmit={handleSubmit} className="login-form">
+            <div className="login-field">
+              <label className="login-label" htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                className="login-input"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="login-field">
+              <label className="login-label" htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                className="login-input"
+                placeholder="Your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+            </div>
+
+            {error && (
+              <div className="login-error">
+                <p>{error}</p>
+              </div>
+            )}
+
+            <button type="submit" className="login-btn" disabled={loading}>
+              {loading ? "Logging in..." : "Log in"}
+            </button>
+          </form>
+
+          <p className="login-footer">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="login-link">Sign up</Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

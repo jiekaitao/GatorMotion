@@ -12,13 +12,13 @@ export async function sendInviteEmail({
   inviteLink: string;
 }) {
   const { data, error } = await resend.emails.send({
-    from: "GatorMove <onboarding@resend.dev>",
+    from: "GatorMotion <onboarding@resend.dev>",
     to,
-    subject: `${therapistName} invited you to GatorMove`,
+    subject: `${therapistName} invited you to GatorMotion`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
         <h1 style="font-size: 28px; font-weight: 800; color: #3C3C3C; margin: 0 0 8px 0;">
-          🐊 GatorMove
+          🐊 GatorMotion
         </h1>
         <p style="font-size: 16px; color: #777777; margin: 0 0 32px 0;">
           Your physical therapy companion
@@ -29,7 +29,7 @@ export async function sendInviteEmail({
             ${therapistName} has invited you!
           </p>
           <p style="font-size: 14px; color: #777777; margin: 0;">
-            Your therapist wants you to join GatorMove to track your exercises, build streaks, and stay on top of your recovery.
+            Your therapist wants you to join GatorMotion to track your exercises, build streaks, and stay on top of your recovery.
           </p>
         </div>
 
