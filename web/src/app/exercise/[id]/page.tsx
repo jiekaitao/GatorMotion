@@ -18,8 +18,38 @@ import {
   Play,
   Eye,
   Zap,
-  ShieldCheck,
+  Navigation,
 } from "lucide-react";
+
+/* ── Exercise-specific instructions by exerciseKey ── */
+const EXERCISE_INSTRUCTIONS: Record<string, string[]> = {
+  arm_abduction: [
+    "Stand upright with your arm relaxed at your side, palm facing inward.",
+    "Slowly raise your arm out to the side, keeping it completely straight.",
+    "Lift until your arm is parallel to the floor, hold briefly, then lower with control.",
+  ],
+  arm_vw: [
+    "Start with both arms at your sides, elbows bent at 90 degrees in a W shape.",
+    "Raise both arms upward, extending into a V shape above your head.",
+    "Keep your shoulders down and relaxed, engaging your core throughout the movement.",
+  ],
+  squat: [
+    "Stand with feet shoulder-width apart, toes pointed slightly outward.",
+    "Lower your body by bending at the knees and hips, keeping your back straight and chest up.",
+    "Descend until your thighs are parallel to the floor, then drive through your heels to stand.",
+  ],
+  leg_abduction: [
+    "Stand tall on one leg, holding onto a wall or chair for balance if needed.",
+    "Keeping your leg straight, slowly raise it out to the side as high as comfortable.",
+    "Pause at the top, then lower back down with control. Keep your hips level throughout.",
+  ],
+};
+
+const DEFAULT_INSTRUCTIONS = [
+  "Position yourself in front of the camera so your full body is visible.",
+  "Follow the animated reference and perform each rep slowly with good control.",
+  "Focus on proper form over speed — quality of movement is more important than quantity.",
+];
 
 export default function ExercisePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: assignmentId } = use(params);
@@ -40,18 +70,18 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const [currentSet, setCurrentSet] = useState(1);
   const [currentRep, setCurrentRep] = useState(0);
 
-  // Countdown state (embedded in hero, not a separate overlay)
+  // Countdown state
   const [countdownNum, setCountdownNum] = useState(3);
   const [countdownText, setCountdownText] = useState<string | null>(null);
   const countdownKeyRef = useRef(0);
 
-  // Hero expansion animation state
+  // Hero expansion
   const [heroExpanded, setHeroExpanded] = useState(false);
 
-  // Transition animation state
+  // Transition animation
   const [transitioning, setTransitioning] = useState(false);
 
-  // WebSocket-driven rep counting (only when exerciseKey is set)
+  // WebSocket
   const {
     connected: wsConnected,
     repCount: wsRepCount,
@@ -62,20 +92,17 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     stopCapture,
   } = useExerciseWebSocket(phase === "active" ? exerciseKey : null);
 
-  // Trigger hero expansion after mount
-  useEffect(() => {
-    const timer = setTimeout(() => setHeroExpanded(true), 900);
-    return () => clearTimeout(timer);
+  // Toggle hero info panel
+  const toggleInfo = useCallback(() => {
+    setHeroExpanded((prev) => !prev);
   }, []);
 
-  // Sync WebSocket rep count to local state
   useEffect(() => {
     if (exerciseKey && wsRepCount > currentRep) {
       setCurrentRep(wsRepCount);
     }
   }, [wsRepCount, exerciseKey, currentRep]);
 
-  // Auto-advance set or complete when reps reached
   useEffect(() => {
     if (phase === "active" && currentRep >= reps && !completing) {
       if (currentSet < sets) {
@@ -88,16 +115,20 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRep, reps, phase, completing, currentSet, sets]);
 
-  // Countdown timer logic (runs when phase === "countdown")
+  // Countdown timer
   useEffect(() => {
     if (phase !== "countdown") return;
+
+    // Animate the active layout entrance
+    setTransitioning(true);
+    const clearTransition = setTimeout(() => setTransitioning(false), 700);
 
     let num = 3;
     setCountdownNum(3);
     setCountdownText(null);
     countdownKeyRef.current++;
 
-    const timers: ReturnType<typeof setTimeout>[] = [];
+    const timers: ReturnType<typeof setTimeout>[] = [clearTransition];
 
     const tick = () => {
       num--;
@@ -109,9 +140,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         setCountdownText("GO!");
         countdownKeyRef.current++;
         timers.push(setTimeout(() => {
-          setTransitioning(true);
           setPhase("active");
-          timers.push(setTimeout(() => setTransitioning(false), 700));
         }, 800));
       }
     };
@@ -134,10 +163,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
       });
 
       const data = await res.json();
-
-      if (data.allCompleted) {
-        setAllDone(true);
-      }
+      if (data.allCompleted) setAllDone(true);
 
       confetti({
         particleCount: 100,
@@ -171,32 +197,26 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
       : null
     : { label: "Good Form!", sublabel: "Keep going", color: "var(--color-green)", icon: <CheckCircle2 size={16} color="white" /> };
 
-  const isHero = phase === "ready" || phase === "countdown";
+  const isHero = phase === "ready";
 
-  // Exercise instruction steps
-  const instructionSteps = [
-    holdSec > 0
-      ? `Hold the position for ${holdSec} seconds.`
-      : "Get into the starting position.",
-    "Perform the movement slowly and controlled.",
-    `Complete ${sets} sets of ${reps} repetitions.`,
-  ];
+  // Exercise-specific instructions
+  const instructionSteps = exerciseKey && EXERCISE_INSTRUCTIONS[exerciseKey]
+    ? EXERCISE_INSTRUCTIONS[exerciseKey]
+    : DEFAULT_INSTRUCTIONS;
 
   // ─── Done state ───
   if (phase === "done") {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "var(--space-xl)",
-          backgroundColor: "var(--color-bg)",
-          textAlign: "center",
-        }}
-      >
+      <div style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "var(--space-xl)",
+        backgroundColor: "var(--color-bg)",
+        textAlign: "center",
+      }}>
         <div className="animate-success">
           <CheckCircle2 size={80} strokeWidth={2} color="var(--color-green)" />
         </div>
@@ -217,11 +237,10 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     );
   }
 
-  // ─── Hero Layout (ready / countdown) ───
+  // ─── Hero Layout (ready) ───
   if (isHero) {
     return (
       <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-bg)", overflow: "hidden" }}>
-        {/* Top bar */}
         <header className="session-header">
           <button
             onClick={() => { stopCapture(); router.push("/home"); }}
@@ -230,24 +249,23 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
             <X size={28} />
           </button>
           <div style={{ flex: 1 }} />
-          <span style={{ color: "var(--color-gray-300)", fontWeight: 600, fontSize: "14px" }}>
+          <span style={{ color: "var(--color-gray-300)", fontWeight: 600, fontSize: "16px" }}>
             {sets} sets &times; {reps} reps
           </span>
         </header>
 
-        {/* Hero content area */}
+        {/* Hero content — info panel always rendered, visibility controlled by CSS */}
         <div className={`hero-content ${heroExpanded ? "hero-expanded" : ""}`}>
-          {/* Left: Demo panel */}
+          {/* Demo panel */}
           <div className="hero-demo">
-            {/* Exercise title */}
             <div style={{ textAlign: "center" }}>
-              <span style={{ color: "var(--color-gray-400)", fontWeight: 600, textTransform: "uppercase", fontSize: "var(--text-small)", letterSpacing: "0.05em" }}>
+              <span style={{ color: "var(--color-gray-400)", fontWeight: 600, textTransform: "uppercase", fontSize: "13px", letterSpacing: "0.05em" }}>
                 Physical Therapy
               </span>
-              <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>{name}</h1>
+              <h1 style={{ fontSize: "32px", fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>{name}</h1>
             </div>
 
-            {/* Skeleton viewer with countdown overlay */}
+            {/* Skeleton viewer */}
             <div style={{ position: "relative", width: "100%", maxWidth: 380, aspectRatio: "3/4" }}>
               {skeletonDataFile ? (
                 <SkeletonViewer
@@ -270,46 +288,20 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                 </div>
               )}
 
-              {/* Countdown number overlaid on skeleton */}
-              {phase === "countdown" && (
-                <div style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "rgba(0, 0, 0, 0.4)",
-                  borderRadius: "var(--radius-xl)",
-                }}>
-                  <div
-                    key={countdownKeyRef.current}
-                    style={{
-                      fontSize: countdownText ? "80px" : "120px",
-                      fontWeight: 800,
-                      color: countdownText ? "#58CC02" : "#FFFFFF",
-                      animation: "countdownPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
-                      textShadow: "0 4px 24px rgba(0,0,0,0.3)",
-                      letterSpacing: countdownText ? "0.1em" : "0",
-                    }}
-                  >
-                    {countdownText || countdownNum}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {/* Exercise instructions below skeleton */}
+            {/* Exercise instructions */}
             <div className="hero-instructions">
               {instructionSteps.map((step, idx) => (
                 <div key={idx} style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-sm)" }}>
                   <span style={{
-                    minWidth: 24,
-                    height: 24,
+                    minWidth: 26,
+                    height: 26,
                     borderRadius: "var(--radius-sm)",
                     backgroundColor: "var(--color-snow)",
                     color: "var(--color-primary)",
                     fontWeight: 700,
-                    fontSize: "12px",
+                    fontSize: "13px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -317,109 +309,121 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                   }}>
                     {idx + 1}
                   </span>
-                  <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--color-gray-400)", lineHeight: 1.4 }}>
+                  <p style={{ fontSize: "15px", fontWeight: 500, color: "var(--color-gray-400)", lineHeight: 1.5 }}>
                     {step}
                   </p>
                 </div>
               ))}
             </div>
+
+            {/* Action buttons */}
+            {phase === "ready" && (
+              <div style={{ display: "flex", gap: "var(--space-sm)", width: "100%", marginTop: "var(--space-sm)" }}>
+                <button
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    height: 56,
+                    borderRadius: "var(--radius-xl)",
+                    fontSize: "18px",
+                    fontWeight: 800,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "var(--space-sm)",
+                  }}
+                  onClick={() => setPhase("countdown")}
+                >
+                  <Play size={20} fill="white" />
+                  Start Exercise
+                </button>
+                <button
+                  className="btn btn-blue"
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: "var(--radius-xl)",
+                    padding: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                  onClick={toggleInfo}
+                >
+                  <Info size={22} />
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Right: Info panel with bezier connectors (desktop only) */}
-          {heroExpanded && (
-            <div className="hero-info-panel">
-              {/* SVG bezier connectors */}
-              <svg
-                className="hero-connectors"
-                viewBox="0 0 100 100"
-                preserveAspectRatio="none"
-              >
-                {/* Origin dot */}
-                <circle cx="2" cy="85" r="3" fill="var(--color-primary)" vectorEffect="non-scaling-stroke" opacity="0.6" />
-                {/* Top curve */}
-                <path
-                  d="M 2 85 C 35 85, 50 15, 100 15"
-                  className="hero-connector-line hero-connector-1"
-                />
-                {/* Middle curve */}
-                <path
-                  d="M 2 85 C 35 85, 50 50, 100 50"
-                  className="hero-connector-line hero-connector-2"
-                />
-                {/* Bottom curve */}
-                <path
-                  d="M 2 85 C 35 85, 50 85, 100 85"
-                  className="hero-connector-line hero-connector-3"
-                />
-              </svg>
+          {/* Info panel — always in DOM, hidden by CSS until expanded */}
+          <div className="hero-info-panel">
+            {/* SVG bezier connectors — origins spread under the demo panel */}
+            <svg
+              className="hero-connectors"
+              viewBox="0 0 120 100"
+              preserveAspectRatio="none"
+            >
+              <circle cx="4" cy="49" r="3" fill="var(--color-primary)" opacity="0.4" vectorEffect="non-scaling-stroke" />
+              <circle cx="4" cy="59" r="3" fill="var(--color-primary)" opacity="0.4" vectorEffect="non-scaling-stroke" />
+              <circle cx="4" cy="69" r="3" fill="var(--color-primary)" opacity="0.4" vectorEffect="non-scaling-stroke" />
+              <path
+                d="M 0 49 C 40 49, 80 17, 120 17"
+                className="hero-connector-line hero-connector-1"
+              />
+              <path
+                d="M 0 59 C 40 59, 80 50, 120 50"
+                className="hero-connector-line hero-connector-2"
+              />
+              <path
+                d="M 0 69 C 40 69, 80 83, 120 83"
+                className="hero-connector-line hero-connector-3"
+              />
+            </svg>
 
-              {/* Info cards */}
-              <div className="hero-info-cards">
-                <div className="hero-info-card hero-card-1">
-                  <div className="hero-info-card-icon" style={{ backgroundColor: "var(--color-primary)" }}>
-                    <Eye size={18} color="white" />
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: "14px", fontWeight: 700, color: "var(--color-gray-600)", marginBottom: 2 }}>Watch &amp; Follow</h4>
-                    <p style={{ fontSize: "13px", color: "var(--color-gray-300)", lineHeight: 1.4 }}>
-                      Follow the animated skeleton reference to learn proper form for each movement.
-                    </p>
-                  </div>
+            {/* Info cards */}
+            <div className="hero-info-cards">
+              <div className="hero-info-card hero-card-1">
+                <div className="hero-info-card-icon" style={{ backgroundColor: "var(--color-primary)" }}>
+                  <Eye size={20} color="white" />
                 </div>
-
-                <div className="hero-info-card hero-card-2">
-                  <div className="hero-info-card-icon" style={{ backgroundColor: "var(--color-green)" }}>
-                    <Zap size={18} color="white" />
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: "14px", fontWeight: 700, color: "var(--color-gray-600)", marginBottom: 2 }}>Smart Rep Counter</h4>
-                    <p style={{ fontSize: "13px", color: "var(--color-gray-300)", lineHeight: 1.4 }}>
-                      Our AI vision system tracks your movements and automatically counts each repetition.
-                    </p>
-                  </div>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-gray-600)", marginBottom: 4 }}>Watch &amp; Follow</h4>
+                  <p style={{ fontSize: "15px", color: "var(--color-gray-300)", lineHeight: 1.5 }}>
+                    The animated skeleton shows you exactly how to perform each movement with proper form and timing.
+                  </p>
                 </div>
+              </div>
 
-                <div className="hero-info-card hero-card-3">
-                  <div className="hero-info-card-icon" style={{ backgroundColor: "var(--color-orange)" }}>
-                    <ShieldCheck size={18} color="white" />
-                  </div>
-                  <div>
-                    <h4 style={{ fontSize: "14px", fontWeight: 700, color: "var(--color-gray-600)", marginBottom: 2 }}>Safety Monitoring</h4>
-                    <p style={{ fontSize: "13px", color: "var(--color-gray-300)", lineHeight: 1.4 }}>
-                      Real-time pain detection alerts you to stop if discomfort is detected during exercise.
-                    </p>
-                  </div>
+              <div className="hero-info-card hero-card-2">
+                <div className="hero-info-card-icon" style={{ backgroundColor: "var(--color-green)" }}>
+                  <Zap size={20} color="white" />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-gray-600)", marginBottom: 4 }}>Smart Rep Counter</h4>
+                  <p style={{ fontSize: "15px", color: "var(--color-gray-300)", lineHeight: 1.5 }}>
+                    Our AI vision system watches your movements through the camera and automatically counts each completed repetition.
+                  </p>
+                </div>
+              </div>
+
+              <div className="hero-info-card hero-card-3">
+                <div className="hero-info-card-icon" style={{ backgroundColor: "var(--color-orange)" }}>
+                  <Navigation size={20} color="white" />
+                </div>
+                <div>
+                  <h4 style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-gray-600)", marginBottom: 4 }}>Guided Positioning</h4>
+                  <p style={{ fontSize: "15px", color: "var(--color-gray-300)", lineHeight: 1.5 }}>
+                    Directional arrows overlay your video feed to guide your arms and legs into the correct position for each part of the movement.
+                  </p>
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Footer with start button */}
-        <div style={{ padding: "var(--space-lg)", display: "flex", justifyContent: "center" }}>
-          {phase === "ready" && (
-            <button
-              className="btn btn-primary"
-              style={{
-                height: 56,
-                borderRadius: "var(--radius-xl)",
-                fontSize: "18px",
-                fontWeight: 800,
-                minWidth: 280,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "var(--space-sm)",
-              }}
-              onClick={() => setPhase("countdown")}
-            >
-              <Play size={20} fill="white" />
-              Start Exercise
-            </button>
-          )}
-        </div>
-
-        {/* Hidden camera feed - starts early so it's ready when active */}
+        {/* Hidden camera — warms up for active phase */}
         <div style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0 }}>
           <CameraFeed active onVideoReady={handleVideoReady} />
         </div>
@@ -427,13 +431,39 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     );
   }
 
-  // ─── Active Layout ───
+  // ─── Active Layout (countdown + active) ───
   return (
     <div
       className={transitioning ? "exercise-transition-in" : ""}
-      style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-bg)", overflow: "hidden" }}
+      style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-bg)", overflow: "hidden", position: "relative" }}
     >
-      {/* Pain detection overlay */}
+      {/* Countdown overlay */}
+      {phase === "countdown" && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.55)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 200,
+        }}>
+          <div
+            key={countdownKeyRef.current}
+            style={{
+              fontSize: countdownText ? "96px" : "140px",
+              fontWeight: 800,
+              color: countdownText ? "#58CC02" : "#FFFFFF",
+              animation: "countdownPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+              textShadow: "0 4px 32px rgba(0,0,0,0.4)",
+              letterSpacing: countdownText ? "0.1em" : "0",
+            }}
+          >
+            {countdownText || countdownNum}
+          </div>
+        </div>
+      )}
+
       {painLevel !== "normal" && (
         <div className="pain-overlay" style={{
           backgroundColor: painLevel === "stop" ? "var(--color-red)" : "var(--color-orange)",
@@ -445,7 +475,6 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         </div>
       )}
 
-      {/* Session Header */}
       <header className="session-header">
         <button
           onClick={() => { stopCapture(); router.push("/home"); }}
@@ -454,7 +483,6 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           <X size={28} />
         </button>
 
-        {/* Segmented progress bar with flame icon */}
         <div style={{ flex: 1, margin: "0 var(--space-xl)", maxWidth: 600, position: "relative" }}>
           <div style={{ display: "flex", gap: 4 }}>
             {Array.from({ length: sets }, (_, i) => {
@@ -483,41 +511,31 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           </div>
         </div>
 
-        {/* Set & rep counter */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--color-primary)", fontWeight: 700, whiteSpace: "nowrap" }}>
           <span>Set {currentSet}/{sets}</span>
         </div>
       </header>
 
-      {/* Main Session Layout */}
       <div className="session-layout">
-        {/* Camera Feed + Instructions below */}
         <div className="session-camera">
           <div style={{ width: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
-            <CameraFeed
-              active
-              onVideoReady={handleVideoReady}
-            />
+            <CameraFeed active onVideoReady={handleVideoReady} />
 
-            {/* Form Feedback Badge */}
             {formBadge && (
-              <div
-                className="animate-bounce-gentle"
-                style={{
-                  position: "absolute",
-                  top: "var(--space-lg)",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  backgroundColor: "var(--color-white)",
-                  borderRadius: "var(--radius-xl)",
-                  boxShadow: "var(--shadow-tactile) var(--color-gray-100)",
-                  padding: "var(--space-sm) var(--space-md)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--space-sm)",
-                  zIndex: 10,
-                }}
-              >
+              <div className="animate-bounce-gentle" style={{
+                position: "absolute",
+                top: "var(--space-lg)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                backgroundColor: "var(--color-white)",
+                borderRadius: "var(--radius-xl)",
+                boxShadow: "var(--shadow-tactile) var(--color-gray-100)",
+                padding: "var(--space-sm) var(--space-md)",
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--space-sm)",
+                zIndex: 10,
+              }}>
                 <div style={{ width: 28, height: 28, borderRadius: "var(--radius-full)", backgroundColor: formBadge.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {formBadge.icon}
                 </div>
@@ -528,7 +546,6 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
               </div>
             )}
 
-            {/* WebSocket connection indicator */}
             {exerciseKey && (
               <div style={{
                 position: "absolute",
@@ -548,10 +565,10 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
 
           {/* Exercise instructions below camera */}
           <div className="camera-instructions">
-            <Info size={16} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <Info size={16} color="var(--color-primary)" style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {instructionSteps.map((step, idx) => (
-                <p key={idx} style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-gray-400)", lineHeight: 1.4 }}>
+                <p key={idx} style={{ fontSize: "14px", fontWeight: 500, color: "var(--color-gray-400)", lineHeight: 1.4 }}>
                   <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>{idx + 1}. </span>
                   {step}
                 </p>
@@ -560,9 +577,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           </div>
         </div>
 
-        {/* Dashboard Panel */}
         <div className="session-dashboard">
-          {/* Exercise Header */}
           <div>
             <span style={{ color: "var(--color-gray-400)", fontWeight: 600, textTransform: "uppercase", fontSize: "var(--text-small)", letterSpacing: "0.05em" }}>
               Physical Therapy
@@ -570,20 +585,11 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
             <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>{name}</h1>
           </div>
 
-          {/* Skeleton Reference Viewer */}
           {skeletonDataFile && (
-            <SkeletonViewer
-              skeletonDataFile={skeletonDataFile}
-              playing
-              mirror
-            />
+            <SkeletonViewer skeletonDataFile={skeletonDataFile} playing mirror />
           )}
 
-          {/* Rep Counter Card */}
-          <div
-            className="card"
-            style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
-          >
+          <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <span style={{ color: "var(--color-gray-300)", fontWeight: 500, fontSize: "var(--text-small)", textTransform: "uppercase" }}>
                 Repetitions
@@ -597,51 +603,26 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                 </span>
               </div>
             </div>
-
-            {/* Circular progress */}
-            <div
-              style={{
-                width: 88,
-                height: 88,
-                borderRadius: "var(--radius-full)",
-                background: `conic-gradient(var(--color-primary) ${reps > 0 ? (currentRep / reps) * 100 : 0}%, var(--color-gray-100) 0)`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <div
-                style={{
-                  width: 72,
-                  height: 72,
-                  borderRadius: "var(--radius-full)",
-                  backgroundColor: "var(--color-white)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
+            <div style={{
+              width: 88, height: 88, borderRadius: "var(--radius-full)",
+              background: `conic-gradient(var(--color-primary) ${reps > 0 ? (currentRep / reps) * 100 : 0}%, var(--color-gray-100) 0)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <div style={{
+                width: 72, height: 72, borderRadius: "var(--radius-full)",
+                backgroundColor: "var(--color-white)", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
                 <Dumbbell size={32} color="var(--color-primary)" />
               </div>
             </div>
           </div>
 
-          {/* Controls */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-md)", marginTop: "auto" }}>
-            <button
-              className="btn btn-secondary"
-              style={{ height: 56, borderRadius: "var(--radius-xl)" }}
-              onClick={() => simulateRep()}
-            >
+            <button className="btn btn-secondary" style={{ height: 56, borderRadius: "var(--radius-xl)" }} onClick={() => simulateRep()}>
               <SkipForward size={18} />
               +1 Rep
             </button>
-            <button
-              className="btn btn-teal"
-              style={{ height: 56, borderRadius: "var(--radius-xl)" }}
-              onClick={handleComplete}
-              disabled={completing}
-            >
+            <button className="btn btn-teal" style={{ height: 56, borderRadius: "var(--radius-xl)" }} onClick={handleComplete} disabled={completing}>
               {completing ? "Saving..." : "Complete"}
             </button>
           </div>

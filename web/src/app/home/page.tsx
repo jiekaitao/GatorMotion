@@ -267,6 +267,12 @@ export default function HomePage() {
           </div>
         )}
 
+        {/* ── Two-Column Dashboard Grid ── */}
+        <div className="home-grid" style={{ ...(!hasTherapist ? { opacity: 0.45, pointerEvents: "none", filter: "grayscale(0.4)" } : {}) }}>
+
+        {/* ── Left Column: Progress + Exercises ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
+
         {/* ── Daily Progress Hero Card ── */}
         {totalCount > 0 && <section
           className="card animate-in"
@@ -308,8 +314,8 @@ export default function HomePage() {
           {/* Mascot / Star icon */}
           <div
             style={{
-              width: 100,
-              height: 100,
+              width: 80,
+              height: 80,
               flexShrink: 0,
               borderRadius: "var(--radius-full)",
               backgroundColor: "var(--color-green-surface)",
@@ -321,7 +327,7 @@ export default function HomePage() {
               zIndex: 1,
             }}
           >
-            <Star size={48} color="var(--color-green)" fill="var(--color-green-light)" />
+            <Star size={36} color="var(--color-green)" fill="var(--color-green-light)" />
             <div
               style={{
                 position: "absolute",
@@ -334,7 +340,7 @@ export default function HomePage() {
                 display: "flex",
               }}
             >
-              <Star size={16} color="var(--color-orange)" fill="var(--color-orange)" />
+              <Star size={14} color="var(--color-orange)" fill="var(--color-orange)" />
             </div>
           </div>
 
@@ -352,9 +358,6 @@ export default function HomePage() {
             }}
           />
         </section>}
-
-        {/* ── Two-Column Dashboard Grid ── */}
-        <div className="home-grid" style={{ marginTop: "var(--space-xl)", ...(!hasTherapist ? { opacity: 0.45, pointerEvents: "none", filter: "grayscale(0.4)" } : {}) }}>
 
         {/* ── Today's Plan Section ── */}
         <section>
@@ -605,16 +608,12 @@ export default function HomePage() {
           </div>
         </section>
 
+        </div>{/* end left column */}
+
         {/* ── Right Column: Messages ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
-
-        {/* ── Messages Section ── */}
-        <section>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: "var(--space-md)" }}>
-            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Conversations</h3>
-          </div>
-
-          <div className="card" style={{ padding: "var(--space-xl)" }}>
+        <section style={{ display: "flex", flexDirection: "column" }}>
+          <div className="card" style={{ padding: "var(--space-lg)", flex: 1, minHeight: 400 }}>
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Conversations</h3>
             {conversations.length > 0 ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
                 {conversations.map((c) => (
@@ -700,7 +699,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        </div>{/* end right column */}
         </div>{/* end home-grid */}
       </div>
 

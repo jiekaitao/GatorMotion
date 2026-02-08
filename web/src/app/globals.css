@@ -659,7 +659,7 @@ a { color: var(--color-blue); text-decoration: none; }
 
 @media (min-width: 768px) {
   .home-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
     align-items: start;
   }
   .home-grid-full {
@@ -1116,8 +1116,7 @@ a { color: var(--color-blue); text-decoration: none; }
   align-items: center;
   justify-content: center;
   padding: var(--space-lg);
-  gap: 0;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .hero-demo {
@@ -1127,20 +1126,20 @@ a { color: var(--color-blue); text-decoration: none; }
   gap: var(--space-md);
   max-width: 380px;
   width: 100%;
-  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-top: -25px;
   animation: heroFadeIn 0.6s ease-out both;
 }
 
 @keyframes heroFadeIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .hero-instructions {
   width: 100%;
   background: var(--color-white);
   border-radius: var(--radius-lg);
-  padding: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -1148,14 +1147,7 @@ a { color: var(--color-blue); text-decoration: none; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
-/* Expanded: slide demo left on desktop */
-@media (min-width: 1024px) {
-  .hero-expanded .hero-demo {
-    transform: translateX(-80px);
-  }
-}
-
-/* ── Hero Info Panel (bezier connectors + cards) ── */
+/* ── Hero Info Panel — inline flex child, expands from 0 width ── */
 .hero-info-panel {
   display: none;
 }
@@ -1164,19 +1156,27 @@ a { color: var(--color-blue); text-decoration: none; }
   .hero-info-panel {
     display: flex;
     align-items: center;
-    gap: 0;
+    max-width: 0;
+    overflow: hidden;
     opacity: 0;
-    animation: heroInfoFadeIn 0.5s ease-out 0.3s forwards;
+    pointer-events: none;
+    transition: max-width 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.3s ease-out;
+  }
+
+  .hero-expanded .hero-info-panel {
+    max-width: 520px;
+    opacity: 1;
+    pointer-events: auto;
+    transition: max-width 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.5s ease-out 0.2s;
   }
 }
 
-@keyframes heroInfoFadeIn {
-  to { opacity: 1; }
-}
-
 .hero-connectors {
-  width: 100px;
-  height: 340px;
+  width: 120px;
+  margin-left: -15px;
+  align-self: stretch;
   flex-shrink: 0;
 }
 
@@ -1185,14 +1185,15 @@ a { color: var(--color-blue); text-decoration: none; }
   stroke: var(--color-primary);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-  stroke-dasharray: 300;
-  stroke-dashoffset: 300;
-  opacity: 0.4;
+  stroke-dasharray: 500;
+  stroke-dashoffset: 500;
+  opacity: 0.35;
 }
 
-.hero-connector-1 { animation: drawConnector 0.8s ease-out 0.4s forwards; }
-.hero-connector-2 { animation: drawConnector 0.8s ease-out 0.6s forwards; }
-.hero-connector-3 { animation: drawConnector 0.8s ease-out 0.8s forwards; }
+/* Animations only fire when parent has .hero-expanded */
+.hero-expanded .hero-connector-1 { animation: drawConnector 0.9s ease-out 0.5s forwards; }
+.hero-expanded .hero-connector-2 { animation: drawConnector 0.9s ease-out 0.7s forwards; }
+.hero-expanded .hero-connector-3 { animation: drawConnector 0.9s ease-out 0.9s forwards; }
 
 @keyframes drawConnector {
   to { stroke-dashoffset: 0; }
@@ -1201,34 +1202,34 @@ a { color: var(--color-blue); text-decoration: none; }
 .hero-info-cards {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
-  max-width: 260px;
+  gap: var(--space-lg);
+  max-width: 300px;
 }
 
 .hero-info-card {
   background: var(--color-white);
   border-radius: var(--radius-lg);
-  padding: var(--space-md);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  padding: var(--space-lg);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.07);
   border: 1px solid var(--color-gray-100);
   display: flex;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   align-items: flex-start;
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateX(24px);
 }
 
-.hero-card-1 { animation: heroCardSlideIn 0.5s ease-out 0.5s forwards; }
-.hero-card-2 { animation: heroCardSlideIn 0.5s ease-out 0.7s forwards; }
-.hero-card-3 { animation: heroCardSlideIn 0.5s ease-out 0.9s forwards; }
+.hero-expanded .hero-card-1 { animation: heroCardSlideIn 0.5s ease-out 0.6s forwards; }
+.hero-expanded .hero-card-2 { animation: heroCardSlideIn 0.5s ease-out 0.8s forwards; }
+.hero-expanded .hero-card-3 { animation: heroCardSlideIn 0.5s ease-out 1.0s forwards; }
 
 @keyframes heroCardSlideIn {
   to { opacity: 1; transform: translateX(0); }
 }
 
 .hero-info-card-icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
