@@ -49,8 +49,8 @@ targets:
           - "webapp/**"
           - "Models/**"
           - "ARBodyTrackingView.swift"
-    resources:
       - path: webapp
+        type: folder
         buildPhase: resources
     settings:
       base:

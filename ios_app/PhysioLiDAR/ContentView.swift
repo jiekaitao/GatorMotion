@@ -13,10 +13,6 @@ struct ContentView: View {
 struct HybridWebView: UIViewRepresentable {
     @ObservedObject var manager: HybridCaptureManager
 
-    /// The remote URL where the web app is hosted.
-    /// Change this to your own domain or GitHub Pages URL.
-    private let webAppURL = "https://jiekaitao.github.io/GatorMotion/webapp/index.html"
-
     func makeCoordinator() -> NativeBridge {
         let bridge = NativeBridge()
         bridge.captureManager = manager
@@ -39,9 +35,17 @@ struct HybridWebView: UIViewRepresentable {
 
         manager.webView = webView
 
-        if let url = URL(string: webAppURL) {
-            print("[ContentView] Loading web app from: \(url)")
-            webView.load(URLRequest(url: url))
+        if let indexURL = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "webapp") {
+            print("[ContentView] Loading webapp from bundle: \(indexURL)")
+            webView.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
+        } else {
+            print("[ContentView] ERROR: webapp/index.html not found in bundle")
+            webView.loadHTMLString("""
+                <html><body style="background:#000;color:#fff;font-family:system-ui;display:flex;
+                align-items:center;justify-content:center;height:100vh;margin:0">
+                <p>webapp/index.html not found in app bundle.<br>Rebuild with xcodegen.</p>
+                </body></html>
+            """, baseURL: nil)
         }
 
         return webView
