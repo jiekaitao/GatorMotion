@@ -625,6 +625,15 @@ export async function getExerciseSession(sessionId: string) {
     .findOne({ _id: new ObjectId(sessionId) });
 }
 
+export async function getPatientActivitySummary(userId: string) {
+  const [sessions, assignments, streak] = await Promise.all([
+    getExerciseSessionsByUser(userId),
+    getUserAssignments(userId),
+    getStreak(userId),
+  ]);
+  return { sessions, assignments, streak };
+}
+
 export async function getExerciseSessionsByUser(userId: string, limit = 30) {
   const db = await getDb();
   return db
