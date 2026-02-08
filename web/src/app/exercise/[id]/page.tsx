@@ -99,6 +99,10 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
 
   // Debug panel toggle
   const [debugOpen, setDebugOpen] = useState(false);
+  // Debug overlay toggles
+  const [showUserWireframe, setShowUserWireframe] = useState(true);
+  const [showRefWireframe, setShowRefWireframe] = useState(true);
+  const [showArrows, setShowArrows] = useState(true);
   // Live snapshot of rmsHistory for rendering (refs don't trigger re-renders)
   const [rmsHistorySnapshot, setRmsHistorySnapshot] = useState<{ timeSec: number; rms: number }[]>([]);
 
@@ -815,7 +819,13 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         <div className="session-camera">
           <div style={{ width: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
             <CameraFeed active onVideoReady={handleVideoReady} />
-            <PoseOverlay landmarksRef={landmarksRef} coachingRef={coachingRef} active={phase === "active" && wsConnected} debugMode={debugOpen} />
+            <PoseOverlay
+              landmarksRef={landmarksRef}
+              coachingRef={coachingRef}
+              active={phase === "active" && wsConnected}
+              debugMode={debugOpen}
+              overlayToggles={debugOpen ? { showUserWireframe, showRefWireframe, showArrows } : undefined}
+            />
 
             {formBadge && (
               <div className="animate-bounce-gentle" style={{
@@ -919,6 +929,12 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
               painCalibrated={painCalibrated}
               repState={repState}
               angle={angle}
+              showUserWireframe={showUserWireframe}
+              showRefWireframe={showRefWireframe}
+              showArrows={showArrows}
+              onToggleUserWireframe={() => setShowUserWireframe(v => !v)}
+              onToggleRefWireframe={() => setShowRefWireframe(v => !v)}
+              onToggleArrows={() => setShowArrows(v => !v)}
             />
           ) : (
             <div className="camera-instructions">
@@ -1020,6 +1036,12 @@ function CoachingPanel({
   painCalibrated,
   repState,
   angle,
+  showUserWireframe,
+  showRefWireframe,
+  showArrows,
+  onToggleUserWireframe,
+  onToggleRefWireframe,
+  onToggleArrows,
 }: {
   rmsDiv: number;
   rmsHistory: RmsEntry[];
@@ -1032,6 +1054,12 @@ function CoachingPanel({
   painCalibrated: boolean;
   repState: string;
   angle: number;
+  showUserWireframe: boolean;
+  showRefWireframe: boolean;
+  showArrows: boolean;
+  onToggleUserWireframe: () => void;
+  onToggleRefWireframe: () => void;
+  onToggleArrows: () => void;
 }) {
   const rmsColor = rmsDiv < 0.04 ? "#58CC02" : rmsDiv < 0.1 ? "#FF9600" : "#EA2B2B";
   const rmsLabel = rmsDiv < 0.04 ? "Excellent" : rmsDiv < 0.1 ? "Adjusting" : "Needs Work";
@@ -1123,6 +1151,19 @@ function CoachingPanel({
         <span>Corrections: <span style={{ fontWeight: 700, color: "var(--color-orange)" }}>{coachingMessages.length}</span></span>
       </div>
 
+      {/* Overlay toggles */}
+      <div style={{
+        display: "flex",
+        gap: "var(--space-md)",
+        borderTop: "1px solid var(--color-gray-100)",
+        paddingTop: "var(--space-sm)",
+        fontSize: "12px",
+      }}>
+        <OverlayToggle label="User Skeleton" color="#02caca" checked={showUserWireframe} onChange={onToggleUserWireframe} />
+        <OverlayToggle label="Ref Skeleton" color="#EA2B2B" checked={showRefWireframe} onChange={onToggleRefWireframe} />
+        <OverlayToggle label="Arrows" color="#FF9600" checked={showArrows} onChange={onToggleArrows} />
+      </div>
+
       {/* Recent coaching messages */}
       {recentMessages.length > 0 && (
         <div style={{
@@ -1180,5 +1221,44 @@ function MiniSparkline({ data }: { data: RmsEntry[] }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function OverlayToggle({ label, color, checked, onChange }: {
+  label: string;
+  color: string;
+  checked: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      cursor: "pointer",
+      userSelect: "none",
+      fontWeight: 600,
+      color: checked ? "var(--color-gray-500)" : "var(--color-gray-200)",
+    }}>
+      <span style={{
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        border: `2px solid ${checked ? color : "var(--color-gray-200)"}`,
+        backgroundColor: checked ? color : "transparent",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        transition: "all 0.15s ease",
+      }}>
+        {checked && (
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+      {label}
+    </label>
   );
 }
