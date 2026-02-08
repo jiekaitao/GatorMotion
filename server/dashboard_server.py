@@ -260,7 +260,7 @@ async def handle_skeleton_ws(request):
                     await client.send_str(skeleton_json)
                 except Exception:
                     dead.add(client)
-            dashboard_clients -= dead
+            dashboard_clients.difference_update(dead)
         elif msg.type == web.WSMsgType.ERROR:
             break
 
