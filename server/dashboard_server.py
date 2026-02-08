@@ -42,8 +42,7 @@ except ImportError:
     HAS_MEDIAPIPE = False
     print("[WARN] mediapipe not installed — skeleton detection disabled")
 
-import websockets
-from websockets.http import Headers
+from aiohttp import web
 
 # ──────────────────────────────────────────────────────────────
 # Config
@@ -368,20 +367,27 @@ connect();
 
 
 # ──────────────────────────────────────────────────────────────
-# Server
+# Server (aiohttp handles both HTTP and WebSocket)
 # ──────────────────────────────────────────────────────────────
 
 dashboard_clients: set = set()
-latest_skeleton: dict | None = None
 
 
-async def handle_ios(ws):
-    """Handle incoming iOS device connection on /skeleton."""
-    print(f"[iOS] Connected from {ws.remote_address}")
-    try:
-        async for message in ws:
+async def handle_index(request):
+    """Serve dashboard HTML."""
+    return web.Response(text=DASHBOARD_HTML, content_type="text/html")
+
+
+async def handle_skeleton_ws(request):
+    """WebSocket endpoint for iOS device — receives frames."""
+    ws = web.WebSocketResponse(max_msg_size=10_000_000)
+    await ws.prepare(request)
+    print(f"[iOS] Connected from {request.remote}")
+
+    async for msg in ws:
+        if msg.type == web.WSMsgType.TEXT:
             try:
-                payload = json.loads(message)
+                payload = json.loads(msg.data)
             except json.JSONDecodeError:
                 continue
 
@@ -389,77 +395,52 @@ async def handle_ios(ws):
             if skeleton is None:
                 continue
 
-            global latest_skeleton
-            latest_skeleton = skeleton
             skeleton_json = json.dumps(skeleton)
 
             dead = set()
             for client in dashboard_clients:
                 try:
-                    await client.send(skeleton_json)
+                    await client.send_str(skeleton_json)
                 except Exception:
                     dead.add(client)
             dashboard_clients -= dead
-    except websockets.ConnectionClosed:
-        pass
-    print(f"[iOS] Disconnected")
+        elif msg.type == web.WSMsgType.ERROR:
+            break
+
+    print("[iOS] Disconnected")
+    return ws
 
 
-async def handle_dashboard(ws):
-    """Handle dashboard browser WebSocket on /dashboard."""
+async def handle_dashboard_ws(request):
+    """WebSocket endpoint for browser dashboard — pushes skeleton data."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
     dashboard_clients.add(ws)
     print(f"[Dashboard] Client connected ({len(dashboard_clients)} total)")
-    try:
-        async for _ in ws:
-            pass  # Dashboard only receives, doesn't send
-    except websockets.ConnectionClosed:
-        pass
-    finally:
-        dashboard_clients.discard(ws)
-        print(f"[Dashboard] Client disconnected ({len(dashboard_clients)} total)")
+
+    async for msg in ws:
+        if msg.type == web.WSMsgType.ERROR:
+            break
+
+    dashboard_clients.discard(ws)
+    print(f"[Dashboard] Client disconnected ({len(dashboard_clients)} total)")
+    return ws
 
 
-async def process_request(path, headers):
-    """Serve dashboard HTML for GET /, route WebSocket by path."""
-    if path == "/" or path == "/index.html":
-        return (200, Headers({"Content-Type": "text/html"}), DASHBOARD_HTML.encode())
-    return None  # Let websockets handle WS upgrade
-
-
-async def handler(ws, path=None):
-    """Route based on path."""
-    # websockets 10.x passes path as second arg
-    # websockets 11+ uses ws.path
-    req_path = path if path else getattr(ws, "path", "/")
-    if req_path.startswith("/skeleton"):
-        await handle_ios(ws)
-    elif req_path.startswith("/dashboard"):
-        await handle_dashboard(ws)
-    else:
-        # Unknown path — check if it wants HTTP
-        try:
-            await ws.close(1008, "Use /skeleton or /dashboard")
-        except Exception:
-            pass
-
-
-async def main():
+def main():
     _init_mediapipe()
+
+    app = web.Application(client_max_size=10_000_000)
+    app.router.add_get("/", handle_index)
+    app.router.add_get("/skeleton", handle_skeleton_ws)
+    app.router.add_get("/dashboard", handle_dashboard_ws)
+
     print(f"[Server] Starting on port {PORT}")
     print(f"  iOS connects to:    ws://YOUR_VULTR_IP:{PORT}/skeleton")
     print(f"  Dashboard at:       http://YOUR_VULTR_IP:{PORT}/")
 
-    async with websockets.serve(
-        handler,
-        "0.0.0.0",
-        PORT,
-        process_request=process_request,
-        max_size=10_000_000,  # 10MB max message (JPEG frames are large)
-        ping_interval=20,
-        ping_timeout=60,
-    ):
-        await asyncio.Future()  # Run forever
+    web.run_app(app, host="0.0.0.0", port=PORT, print=None)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
