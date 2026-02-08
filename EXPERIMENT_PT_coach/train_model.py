@@ -75,15 +75,33 @@ def train(exercise_key: str, reference_json: Path, model_out: Path, metadata_out
     dist_p90 = float(np.percentile(loo_nearest, 90))
     dist_p99 = float(np.percentile(loo_nearest, 99))
 
-    # Tolerances for correction deltas from local frame-to-frame motion.
+    # Tolerances: smoothed trajectory residual captures natural variability without
+    # confusing it with exercise motion range.  We smooth the reference trajectory with
+    # a moving average, then measure median absolute deviation of the raw positions from
+    # the smooth.  This gives a principled noise floor per joint per axis.
     tol = {}
-    diffs = np.abs(np.diff(ref_norm, axis=0))  # (N-1,33,3)
+    n = ref_norm.shape[0]
+    smooth_window = max(3, min(7, n // 30))  # ~3-4 frames: captures local jitter, not motion
+
+    def _smooth_1d(arr: np.ndarray, w: int) -> np.ndarray:
+        kernel = np.ones(w, dtype=np.float32) / float(w)
+        return np.convolve(arr, kernel, mode="same")
+
     for idx in correction_landmarks:
-        tol_x = float(np.percentile(diffs[:, idx, 0], 90) * 2.0 + 0.03)
-        tol_y = float(np.percentile(diffs[:, idx, 1], 90) * 2.0 + 0.04)
+        raw_x = ref_norm[:, idx, 0].astype(np.float64)
+        raw_y = ref_norm[:, idx, 1].astype(np.float64)
+        smooth_x = _smooth_1d(raw_x, smooth_window)
+        smooth_y = _smooth_1d(raw_y, smooth_window)
+        residual_x = np.abs(raw_x - smooth_x)
+        residual_y = np.abs(raw_y - smooth_y)
+        # Use p90 of residual * 3 + floor as tolerance.
+        # This means corrections fire when the user deviates ~3x more than
+        # the natural jitter in the reference data itself.
+        tol_x = float(np.percentile(residual_x, 90) * 3.0 + 0.03)
+        tol_y = float(np.percentile(residual_y, 90) * 3.0 + 0.04)
         tol[idx] = {
             "x": max(0.05, tol_x),
-            "y": max(0.08, tol_y),
+            "y": max(0.06, tol_y),
             "side": SIDE_BY_INDEX[idx],
             "part": PART_BY_INDEX[idx],
         }

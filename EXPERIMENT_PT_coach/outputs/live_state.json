@@ -1,40 +1,34 @@
 {
-  "ts_ms": 1770527265129,
+  "ts_ms": 1770531290994,
   "exercise": {
     "name": "squat",
     "display_name": "Squat",
     "phase": "setup",
-    "rep": 24,
-    "reference_frame": 15
+    "rep": 0,
+    "reference_frame": 16
   },
   "alignment": {
     "method": "temporal_window_mse",
     "window_ms": 1000,
     "window_samples": 15,
-    "temporal_distance": 58.2895,
+    "temporal_distance": 46.9204,
     "snap_threshold": 1.5866,
-    "demo_loop_frame": 128,
+    "demo_loop_frame": 19,
     "demo_snapped": false
   },
   "quality": {
     "score": 0.0,
-    "confidence": 0.266,
-    "distance": 56.003
+    "confidence": 0.529,
+    "distance": 46.6314
   },
   "measurements": {
-    "left_knee_angle_deg": 176.6,
-    "right_knee_angle_deg": 178.6,
-    "avg_knee_angle_deg": 177.6,
-    "left_foot_x_body": 1.938,
-    "right_foot_x_body": 1.393
+    "left_knee_angle_deg": 177.7,
+    "right_knee_angle_deg": 131.2,
+    "avg_knee_angle_deg": 154.5,
+    "left_foot_x_body": 3.078,
+    "right_foot_x_body": 1.744
   },
-  "corrections": [
-    {
-      "id": "POSE_NOT_CLEAR",
-      "severity": "low",
-      "text": "Move fully into frame and face the camera."
-    }
-  ],
+  "corrections": [],
   "speech": {
     "should_speak": false,
     "text": "",

@@ -256,3 +256,78 @@ def moving_average(data: list[float], window: int) -> float:
 
 def correction_landmarks_for_exercise(exercise_key: str) -> list[int]:
     return list(EXERCISE_CORRECTION_LANDMARKS.get(exercise_key, CORRECTION_LANDMARKS))
+
+
+# Major body landmarks used for Procrustes alignment (stable, high-confidence).
+ALIGNMENT_LANDMARKS = [
+    LANDMARK_INDEX["left_shoulder"],
+    LANDMARK_INDEX["right_shoulder"],
+    LANDMARK_INDEX["left_hip"],
+    LANDMARK_INDEX["right_hip"],
+    LANDMARK_INDEX["left_knee"],
+    LANDMARK_INDEX["right_knee"],
+    LANDMARK_INDEX["left_ankle"],
+    LANDMARK_INDEX["right_ankle"],
+]
+
+
+def procrustes_align_2d(
+    user_pts: np.ndarray,
+    ref_pts: np.ndarray,
+    allow_reflection: bool = False,
+) -> tuple[np.ndarray, np.ndarray, float, np.ndarray]:
+    """Procrustes alignment: find optimal rotation + uniform scale to map ref onto user.
+
+    Given two matched point sets (K, 2), finds rotation R and scale s that minimizes:
+        ||user - (s * ref @ R.T + t)||^2
+
+    Args:
+        user_pts: (K, 2) target points (user's body-frame coordinates)
+        ref_pts:  (K, 2) source points (reference body-frame coordinates)
+        allow_reflection: if False, constrain to proper rotation (no mirror flip)
+
+    Returns:
+        aligned_ref: (K, 2) reference points after alignment
+        rotation:    (2, 2) rotation matrix
+        scale:       scalar scale factor
+        translation: (2,) translation vector
+    """
+    u = user_pts.astype(np.float64)
+    r = ref_pts.astype(np.float64)
+
+    # 1. Center both
+    u_mean = u.mean(axis=0)
+    r_mean = r.mean(axis=0)
+    u_c = u - u_mean
+    r_c = r - r_mean
+
+    # 2. Compute scale
+    u_norm = np.linalg.norm(u_c)
+    r_norm = np.linalg.norm(r_c)
+    if u_norm < 1e-8 or r_norm < 1e-8:
+        return ref_pts.copy(), np.eye(2, dtype=np.float32), 1.0, np.zeros(2, dtype=np.float32)
+
+    s = u_norm / r_norm
+
+    # 3. Optimal rotation via SVD of cross-covariance
+    # We want R that minimizes ||u_c - s * r_c @ R.T||
+    M = u_c.T @ r_c  # (2, 2)
+    U, S, Vt = np.linalg.svd(M)
+
+    if not allow_reflection:
+        # Ensure proper rotation (det = +1)
+        d = np.linalg.det(U @ Vt)
+        D = np.diag([1.0, d])
+        R = U @ D @ Vt
+    else:
+        R = U @ Vt
+
+    # 4. Apply: aligned = s * r_c @ R.T + u_mean
+    aligned = s * (r_c @ R.T) + u_mean
+
+    return (
+        aligned.astype(np.float32),
+        R.astype(np.float32),
+        float(s),
+        (u_mean - s * r_mean @ R.T).astype(np.float32),
+    )

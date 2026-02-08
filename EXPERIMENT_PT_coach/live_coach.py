@@ -66,6 +66,11 @@ class PTCoachEngine:
         self.clear_streak: dict[str, int] = {}
         self.overlay_state: dict[str, dict[str, np.ndarray]] = {}
 
+        # Lock the reference frame when a correction activates so the user
+        # has a stable target to move toward (prevents "chasing a moving arrow").
+        self.correction_target_lock: dict[str, int] = {}  # {correction_id: locked_ref_idx}
+        self.lock_max_phase_drift = 25  # unlock if user moves >25 frames past locked phase
+
         # Stricter anti-pedantic hysteresis:
         # only very high deviations trigger; clear once mostly corrected.
         self.activate_ratio = 2.5
@@ -76,8 +81,8 @@ class PTCoachEngine:
         self.clear_abs_dy = 0.03
 
         # Arrow endpoint smoothing (larger alpha => smoother, slower).
-        self.overlay_alpha_cur = 0.72
-        self.overlay_alpha_tgt = 0.82
+        self.overlay_alpha_cur = 0.75
+        self.overlay_alpha_tgt = 0.88
 
         # Temporal phase alignment: compare user's recent motion window to all
         # possible reference windows and pick best matching phase.
@@ -85,7 +90,7 @@ class PTCoachEngine:
         self.align_len = int(min(15, max(6, self.ref_features_scaled.shape[0] // 10)))
         self.user_feature_hist: deque[tuple[int, np.ndarray]] = deque(maxlen=240)
         self.ref_windows = self._build_ref_windows(self.align_len)
-        self.ref_idx_ema: float | None = None
+        self.ref_idx_recent: deque[int] = deque(maxlen=3)  # median filter, zero systematic lag
 
     def _scale_feature(self, feat: np.ndarray) -> np.ndarray:
         return (feat - self.feat_mean) / self.feat_std
@@ -129,22 +134,21 @@ class PTCoachEngine:
         mse = np.mean(diff * diff, axis=(1, 2))
 
         # Small continuity bias to avoid phase flicker frame-to-frame.
-        if self.ref_idx_ema is not None and self.ref_windows.shape[0] > 1:
+        if self.ref_idx_recent and self.ref_windows.shape[0] > 1:
+            prev_idx = float(self.ref_idx_recent[-1])
             starts = np.arange(self.ref_windows.shape[0], dtype=np.float32)
             end_idxs = starts + (self.align_len - 1)
-            continuity = np.abs(end_idxs - self.ref_idx_ema)
+            continuity = np.abs(end_idxs - prev_idx)
             mse = mse + (0.0008 * continuity)
 
         best_start = int(np.argmin(mse))
-        matched_idx = int(min(best_start + self.align_len - 1, self.ref_features_scaled.shape[0] - 1))
+        raw_idx = int(min(best_start + self.align_len - 1, self.ref_features_scaled.shape[0] - 1))
 
-        if self.ref_idx_ema is None:
-            self.ref_idx_ema = float(matched_idx)
-        else:
-            self.ref_idx_ema = (0.8 * self.ref_idx_ema) + (0.2 * matched_idx)
-
-        matched_idx = int(round(self.ref_idx_ema))
+        # Median filter (window=3): zero systematic lag, smooths single-frame outliers.
+        self.ref_idx_recent.append(raw_idx)
+        matched_idx = int(np.median(list(self.ref_idx_recent)))
         matched_idx = max(0, min(matched_idx, self.ref_features_scaled.shape[0] - 1))
+
         frame_dist = float(np.linalg.norm(self.ref_features_scaled[matched_idx] - feat_scaled))
         return matched_idx, frame_dist
 
@@ -234,17 +238,22 @@ class PTCoachEngine:
         norm, frame_info = normalize_to_body_frame(landmarks_xyzw)
         feat = feature_vector(norm, self.feature_landmarks)
         feat_scaled = self._scale_feature(feat)
-        ref_idx, temporal_dist = self._temporal_match_reference(ts_ms, feat_scaled)
-        _, dist = self._single_frame_match(feat_scaled)
 
-        quality = self._quality_from_distance(dist)
+        # Phase alignment: temporal window match identifies WHICH reference frame
+        # the user is at (answers "where in the exercise are you?").
+        ref_idx, matched_dist = self._temporal_match_reference(ts_ms, feat_scaled)
+
+        # Quality: nearest-neighbor distance across ALL reference frames
+        # (answers "how good is your overall form?" independent of phase timing).
+        _, nn_dist = self._single_frame_match(feat_scaled)
+        quality = self._quality_from_distance(nn_dist)
         self.quality_hist.append(quality)
         quality_smooth = moving_average(list(self.quality_hist), 8)
 
         left_knee, right_knee, knee_avg = knee_angles_deg(norm)
         self._update_reps(knee_avg)
 
-        ref = self.ref_norm[ref_idx]
+        ref_live = self.ref_norm[ref_idx]
         corrections: list[dict[str, Any]] = []
 
         active_ids_now: set[str] = set()
@@ -260,12 +269,14 @@ class PTCoachEngine:
                 self.active_corrections[correction_id] = False
                 self.activate_streak[correction_id] = 0
                 self.clear_streak[correction_id] = 0
+                self.correction_target_lock.pop(correction_id, None)
                 continue
 
+            # Use LIVE reference for activation detection (is there a problem?)
             cur_x = float(norm[idx, 0])
             cur_y = float(norm[idx, 1])
-            ref_x = float(ref[idx, 0])
-            ref_y = float(ref[idx, 1])
+            ref_x = float(ref_live[idx, 0])
+            ref_y = float(ref_live[idx, 1])
             dx = cur_x - ref_x
             dy = cur_y - ref_y
             tol_x = float(self.tol[idx]["x"])
@@ -301,7 +312,46 @@ class PTCoachEngine:
             self.active_corrections[correction_id] = is_active
 
             if not is_active:
+                # Correction cleared — release the target lock.
+                self.correction_target_lock.pop(correction_id, None)
                 continue
+
+            # --- Target locking: give user a STABLE target to move toward ---
+            # On first activation, lock the current ref_idx as the target.
+            locked_idx = self.correction_target_lock.get(correction_id)
+            if locked_idx is None:
+                # New correction — lock the target frame.
+                self.correction_target_lock[correction_id] = ref_idx
+                locked_idx = ref_idx
+            else:
+                # Release lock if user has moved far past the locked phase
+                # (they moved on to a different part of the exercise).
+                phase_drift = abs(ref_idx - locked_idx)
+                if phase_drift > self.lock_max_phase_drift:
+                    self.correction_target_lock[correction_id] = ref_idx
+                    locked_idx = ref_idx
+
+            # Use the LOCKED reference frame for correction vectors (stable target).
+            ref_locked = self.ref_norm[locked_idx]
+            ref_x = float(ref_locked[idx, 0])
+            ref_y = float(ref_locked[idx, 1])
+            dx = cur_x - ref_x
+            dy = cur_y - ref_y
+            ratio_x = abs(dx) / max(tol_x, 1e-6)
+            ratio_y = abs(dy) / max(tol_y, 1e-6)
+            err_ratio = max(ratio_x, ratio_y)
+
+            # Re-check clear against locked target — clear if user reached the locked target.
+            locked_clear = (
+                err_ratio <= self.clear_ratio
+                or (abs(dx) <= self.clear_abs_dx and abs(dy) <= self.clear_abs_dy)
+            )
+            if locked_clear:
+                self.clear_streak[correction_id] = self.clear_streak.get(correction_id, 0) + 1
+                if self.clear_streak[correction_id] >= 2:
+                    self.active_corrections[correction_id] = False
+                    self.correction_target_lock.pop(correction_id, None)
+                    continue
 
             # If overall pose already matches the reference very well,
             # suppress medium-ish residual deltas to avoid pedantic coaching.
@@ -317,7 +367,7 @@ class PTCoachEngine:
             elif err_ratio >= 1.35:
                 mag = "medium"
 
-            target_xy_img = self._body_to_image_xy(frame_info, ref[idx, :2])
+            target_xy_img = self._body_to_image_xy(frame_info, ref_locked[idx, :2])
             cur_xy_img = landmarks_xyzw[idx, :2]
             cur_xy_img_s, target_xy_img_s = self._smooth_overlay_points(
                 correction_id, cur_xy_img, target_xy_img
@@ -401,12 +451,12 @@ class PTCoachEngine:
                 "method": "temporal_window_mse",
                 "window_ms": int(self.align_window_ms),
                 "window_samples": int(self.align_len),
-                "temporal_distance": round(float(temporal_dist), 4),
+                "temporal_distance": round(float(matched_dist), 4),
             },
             "quality": {
                 "score": round(float(quality_smooth), 3),
                 "confidence": round(float(np.clip(visibility, 0.0, 1.0)), 3),
-                "distance": round(float(dist), 4),
+                "distance": round(float(nn_dist), 4),
             },
             "measurements": {
                 "left_knee_angle_deg": round(float(left_knee), 1),
@@ -436,6 +486,7 @@ class Replayer:
     def __init__(self, reference_json: Path):
         self.data = load_reference_json(reference_json)
         self.frames = self.data["frames"]
+        self.fps = float(self.data.get("fps", 15.0))
         self.i = 0
 
     def next_landmarks(self) -> np.ndarray | None:
@@ -444,6 +495,10 @@ class Replayer:
         frame = self.frames[self.i % len(self.frames)]
         self.i += 1
         return landmarks_list_to_np(frame["landmarks"])
+
+    def simulated_ts_ms(self) -> int:
+        """Return a simulated timestamp based on frame index and reference FPS."""
+        return int(self.i * (1000.0 / self.fps))
 
 
 class ReferenceDemoLoop:
@@ -958,7 +1013,6 @@ def main() -> None:
 
     try:
         while True:
-            ts_ms = int(time.time() * 1000)
             frame = None
             landmarks_xyzw = None
             demo_state: dict[str, Any] | None = None
@@ -968,10 +1022,13 @@ def main() -> None:
                 landmarks_xyzw = replayer.next_landmarks()
                 if landmarks_xyzw is None:
                     break
+                # Use simulated timestamps so temporal alignment sees correct frame spacing.
+                ts_ms = replayer.simulated_ts_ms()
                 frame = np.zeros((720, 960, 3), dtype=np.uint8)
                 draw_pose_points(frame, landmarks_xyzw, mirror=args.mirror)
             else:
                 assert cap is not None and landmarker is not None
+                ts_ms = int(time.time() * 1000)
                 ret, raw = cap.read()
                 if not ret:
                     print("Camera read failed; stopping.")
