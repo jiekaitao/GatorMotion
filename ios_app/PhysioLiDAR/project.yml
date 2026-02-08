@@ -49,9 +49,8 @@ targets:
           - "webapp/**"
           - "Models/**"
           - "ARBodyTrackingView.swift"
-      - path: webapp
-        type: folder
-        buildPhase: resources
+          - "HybridCaptureManager.swift"
+          - "NativeBridge.swift"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gatormotion.PhysioLiDAR

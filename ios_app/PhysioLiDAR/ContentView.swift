@@ -1,59 +1,59 @@
 import SwiftUI
-import WebKit
 
 struct ContentView: View {
-    @StateObject private var manager = HybridCaptureManager()
+    @StateObject private var manager = StreamingCaptureManager()
 
     var body: some View {
-        HybridWebView(manager: manager)
-            .ignoresSafeArea()
-    }
-}
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-struct HybridWebView: UIViewRepresentable {
-    @ObservedObject var manager: HybridCaptureManager
+            VStack(spacing: 20) {
+                Spacer()
 
-    func makeCoordinator() -> NativeBridge {
-        let bridge = NativeBridge()
-        bridge.captureManager = manager
-        return bridge
-    }
+                Text("GatorMotion")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
 
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        let uc = config.userContentController
-        uc.add(context.coordinator, name: "depthRequest")
-        uc.add(context.coordinator, name: "control")
-        uc.add(context.coordinator, name: "skeletonPacket")
-        uc.add(context.coordinator, name: "log")
+                Text(manager.statusText)
+                    .font(.headline)
+                    .foregroundColor(manager.isStreaming ? .green : .gray)
+                    .padding(.horizontal)
+                    .multilineTextAlignment(.center)
 
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
+                Text("Frames: \(manager.frameCount)")
+                    .font(.caption)
+                    .foregroundColor(.gray)
 
-        let webView = WKWebView(frame: .zero, configuration: config)
-        webView.isOpaque = false
+                Spacer()
 
-        manager.webView = webView
+                VStack(spacing: 12) {
+                    TextField("Server URL", text: $manager.serverURL)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .padding(.horizontal, 40)
 
-        if let indexURL = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "webapp") {
-            print("[ContentView] Loading webapp from bundle: \(indexURL)")
-            webView.loadFileURL(indexURL, allowingReadAccessTo: indexURL.deletingLastPathComponent())
-        } else {
-            print("[ContentView] ERROR: webapp/index.html not found in bundle")
-            webView.loadHTMLString("""
-                <html><body style="background:#000;color:#fff;font-family:system-ui;display:flex;
-                align-items:center;justify-content:center;height:100vh;margin:0">
-                <p>webapp/index.html not found in app bundle.<br>Rebuild with xcodegen.</p>
-                </body></html>
-            """, baseURL: nil)
+                    Button(action: {
+                        if manager.isStreaming {
+                            manager.stop()
+                        } else {
+                            manager.start()
+                        }
+                    }) {
+                        Text(manager.isStreaming ? "Stop Streaming" : "Start Streaming")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(manager.isStreaming ? Color.red : Color.green)
+                            .cornerRadius(12)
+                    }
+                    .padding(.horizontal, 40)
+                }
+
+                Spacer().frame(height: 60)
+            }
         }
-
-        return webView
     }
-
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
-}
-
-#Preview {
-    ContentView()
 }
