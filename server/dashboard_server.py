@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """
-GatorMotion Dashboard Server — deploy on Vultr.
+GatorMotion LiDAR API — Docker service for iOS LiDAR streaming.
 
 Receives JPEG + depth grid from iOS app via WebSocket,
 runs MediaPipe pose detection, and pushes skeleton data
-to a web dashboard served over HTTP.
-
-Usage:
-    pip install websockets mediapipe opencv-python-headless numpy
-    python dashboard_server.py
+to browser dashboard clients.
 
 Env vars:
-    PORT           — WebSocket + HTTP port (default 8765)
+    PORT           — HTTP/WebSocket port (default 8766)
     MODEL_PATH     — path to pose_landmarker_full.task (downloads if missing)
 """
 
@@ -20,9 +16,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import math
 import os
-import struct
 import time
 from pathlib import Path
 
@@ -48,7 +42,7 @@ from aiohttp import web
 # Config
 # ──────────────────────────────────────────────────────────────
 
-PORT = int(os.getenv("PORT", "8765"))
+PORT = int(os.getenv("PORT", "8766"))
 MODEL_PATH = os.getenv("MODEL_PATH", "pose_landmarker_full.task")
 MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/"
@@ -230,152 +224,15 @@ def process_frame(payload: dict) -> dict | None:
 
 
 # ──────────────────────────────────────────────────────────────
-# Dashboard HTML
-# ──────────────────────────────────────────────────────────────
-
-DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GatorMotion Dashboard</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:#111;color:#fff;font-family:-apple-system,system-ui,sans-serif;
-     display:flex;flex-direction:column;align-items:center;min-height:100vh}
-h1{margin:20px 0 10px;font-size:24px}
-#status{font-size:14px;color:#888;margin-bottom:10px}
-#canvasWrap{position:relative;width:640px;height:480px;background:#000;border-radius:8px;overflow:hidden}
-canvas{position:absolute;top:0;left:0;width:100%;height:100%}
-#stats{margin:16px 0;font-size:13px;color:#aaa;display:flex;gap:20px}
-.stat-label{color:#666}
-#jointList{margin:10px 0;font-size:12px;color:#ccc;max-width:640px;
-           display:flex;flex-wrap:wrap;gap:6px}
-.joint-tag{background:#222;padding:3px 8px;border-radius:4px;white-space:nowrap}
-.joint-tag .depth{color:#4ade80}
-</style>
-</head>
-<body>
-<h1>GatorMotion Dashboard</h1>
-<div id="status">Connecting...</div>
-<div id="canvasWrap">
-  <canvas id="skeletonCanvas"></canvas>
-</div>
-<div id="stats">
-  <span><span class="stat-label">FPS:</span> <span id="fps">0</span></span>
-  <span><span class="stat-label">Joints:</span> <span id="jointCount">0</span></span>
-  <span><span class="stat-label">Depth pts:</span> <span id="depthCount">0</span></span>
-  <span><span class="stat-label">Device:</span> <span id="deviceInfo">-</span></span>
-</div>
-<div id="jointList"></div>
-
-<script>
-const canvas = document.getElementById('skeletonCanvas');
-const ctx = canvas.getContext('2d');
-const statusEl = document.getElementById('status');
-let frameCount = 0, lastFpsTime = Date.now();
-
-function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(proto + '://' + location.host + '/dashboard');
-
-  ws.onopen = () => { statusEl.textContent = 'Connected'; statusEl.style.color = '#4ade80'; };
-  ws.onclose = () => {
-    statusEl.textContent = 'Disconnected — reconnecting...';
-    statusEl.style.color = '#f87171';
-    setTimeout(connect, 1000);
-  };
-  ws.onerror = () => ws.close();
-
-  ws.onmessage = (evt) => {
-    const data = JSON.parse(evt.data);
-    renderSkeleton(data);
-    updateStats(data);
-    frameCount++;
-    const now = Date.now();
-    if (now - lastFpsTime > 1000) {
-      document.getElementById('fps').textContent = frameCount;
-      frameCount = 0;
-      lastFpsTime = now;
-    }
-  };
-}
-
-function renderSkeleton(data) {
-  const cw = data.camera_width || 640;
-  const ch = data.camera_height || 480;
-  canvas.width = cw; canvas.height = ch;
-  ctx.clearRect(0, 0, cw, ch);
-
-  const parts = data.body_part_depths || [];
-  const byId = new Map();
-  parts.forEach(p => byId.set(p.landmark_id, p));
-
-  const conns = data.connections || [];
-
-  // Draw connections
-  ctx.strokeStyle = 'rgba(0,255,0,0.8)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  for (const [s,e] of conns) {
-    const sp = byId.get(s), ep = byId.get(e);
-    if (!sp || !ep) continue;
-    ctx.moveTo(sp.x, sp.y);
-    ctx.lineTo(ep.x, ep.y);
-  }
-  ctx.stroke();
-
-  // Draw joints
-  ctx.fillStyle = '#facc15';
-  for (const p of parts) {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Draw labels
-  ctx.font = '10px monospace';
-  for (const p of parts) {
-    const label = p.name + (p.distance_cm > 0 ? ' ' + p.distance_cm.toFixed(0) + 'cm' : '');
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    const tw = ctx.measureText(label).width;
-    ctx.fillRect(p.x + 6, p.y - 10, tw + 4, 14);
-    ctx.fillStyle = '#fff';
-    ctx.fillText(label, p.x + 8, p.y);
-  }
-}
-
-function updateStats(data) {
-  const parts = data.body_part_depths || [];
-  const depths = data.point_depths_m || {};
-  document.getElementById('jointCount').textContent = parts.length;
-  document.getElementById('depthCount').textContent = Object.keys(depths).length;
-  document.getElementById('deviceInfo').textContent = data.device || '-';
-
-  const list = document.getElementById('jointList');
-  list.innerHTML = parts.map(p => {
-    const d = p.distance_cm > 0 ? p.distance_cm.toFixed(0) + 'cm' : '--';
-    return '<span class="joint-tag">' + p.name + ' <span class="depth">' + d + '</span></span>';
-  }).join('');
-}
-
-connect();
-</script>
-</body>
-</html>
-"""
-
-
-# ──────────────────────────────────────────────────────────────
-# Server (aiohttp handles both HTTP and WebSocket)
+# Server
 # ──────────────────────────────────────────────────────────────
 
 dashboard_clients: set = set()
 
 
-async def handle_index(request):
-    """Serve dashboard HTML."""
-    return web.Response(text=DASHBOARD_HTML, content_type="text/html")
+async def handle_health(request):
+    """Health check endpoint."""
+    return web.Response(text="ok")
 
 
 async def handle_skeleton_ws(request):
@@ -431,14 +288,11 @@ def main():
     _init_mediapipe()
 
     app = web.Application(client_max_size=10_000_000)
-    app.router.add_get("/", handle_index)
+    app.router.add_get("/health", handle_health)
     app.router.add_get("/skeleton", handle_skeleton_ws)
     app.router.add_get("/dashboard", handle_dashboard_ws)
 
-    print(f"[Server] Starting on port {PORT}")
-    print(f"  iOS connects to:    ws://YOUR_VULTR_IP:{PORT}/skeleton")
-    print(f"  Dashboard at:       http://YOUR_VULTR_IP:{PORT}/")
-
+    print(f"[LiDAR API] Starting on port {PORT}")
     web.run_app(app, host="0.0.0.0", port=PORT, print=None)
 
 

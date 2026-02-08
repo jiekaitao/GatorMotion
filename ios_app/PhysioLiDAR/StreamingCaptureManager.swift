@@ -5,7 +5,7 @@ final class StreamingCaptureManager: NSObject, ObservableObject {
 
     // MARK: - Published state
 
-    @Published var serverURL = "ws://YOUR_VULTR_IP:8765/skeleton"
+    @Published var serverURL = "wss://gatormotion.com/ws/lidar/skeleton"
     @Published private(set) var isStreaming = false
     @Published private(set) var statusText = "Ready"
     @Published private(set) var frameCount = 0
