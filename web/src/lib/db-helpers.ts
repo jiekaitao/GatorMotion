@@ -347,7 +347,8 @@ export async function removeRelationship(patientId: string, therapistId: string)
   const db = await getDb();
   const result = await db.collection("users").updateOne(
     { _id: new ObjectId(patientId) },
-    { $pull: { therapistIds: therapistId } as Record<string, unknown> }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { $pull: { therapistIds: therapistId } } as any
   );
   return result.modifiedCount > 0;
 }

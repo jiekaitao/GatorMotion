@@ -7,7 +7,7 @@ import { User, Shield } from "lucide-react";
 interface UserInfo {
   _id: string;
   name: string;
-  email: string;
+  username: string;
   role: string;
   createdAt: string;
 }
@@ -57,7 +57,7 @@ export default function DevUsersPage() {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700 }}>{u.name}</div>
-                <div className="text-small">{u.email}</div>
+                <div className="text-small">@{u.username}</div>
               </div>
               <div className={`badge ${u.role === "therapist" ? "badge-blue" : "badge-green"}`}>
                 {u.role}
