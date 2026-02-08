@@ -33,6 +33,12 @@ export default function SettingsPage() {
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Voice usage stats
+  const [usageStats, setUsageStats] = useState<{
+    todayCount: number; todayCharacters: number;
+    totalCount: number; totalCharacters: number; dailyLimit: number;
+  } | null>(null);
+
   // Delete account
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -53,6 +59,13 @@ export default function SettingsPage() {
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);
+
+  useEffect(() => {
+    fetch("/api/tts/usage")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data) setUsageStats(data); })
+      .catch(() => {});
+  }, []);
 
   async function handleProfileSubmit(e: FormEvent) {
     e.preventDefault();
@@ -388,6 +401,47 @@ export default function SettingsPage() {
               >
                 {voiceMsg.type === "success" && <Check size={16} />}
                 {voiceMsg.text}
+              </div>
+            )}
+
+            {/* ── Voice Usage Stats ── */}
+            {usageStats && (
+              <div style={{
+                marginTop: "var(--space-lg)",
+                padding: "var(--space-md)",
+                borderRadius: "var(--radius-md)",
+                backgroundColor: "var(--color-snow, #f5f5f5)",
+              }}>
+                <h4 style={{ fontWeight: 700, fontSize: "var(--text-small)", textTransform: "uppercase", color: "var(--color-gray-400)", marginBottom: "var(--space-sm)", letterSpacing: "0.05em" }}>
+                  Voice Usage
+                </h4>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-sm)", marginBottom: 8 }}>
+                  <span style={{ fontSize: "28px", fontWeight: 800, color: "var(--color-blue)" }}>
+                    {usageStats.todayCount}
+                  </span>
+                  <span style={{ fontSize: "var(--text-small)", color: "var(--color-gray-400)", fontWeight: 600 }}>
+                    / {usageStats.dailyLimit} today
+                  </span>
+                </div>
+                <div style={{
+                  width: "100%",
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: "var(--color-gray-100, #e5e5e5)",
+                  overflow: "hidden",
+                }}>
+                  <div style={{
+                    width: `${Math.min(100, (usageStats.todayCount / usageStats.dailyLimit) * 100)}%`,
+                    height: "100%",
+                    borderRadius: 4,
+                    backgroundColor: usageStats.todayCount >= usageStats.dailyLimit ? "var(--color-red)" : "var(--color-blue)",
+                    transition: "width 0.3s ease",
+                  }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "var(--space-sm)", fontSize: "var(--text-small)", color: "var(--color-gray-300)" }}>
+                  <span>{usageStats.totalCount} all-time requests</span>
+                  <span>{(usageStats.totalCharacters / 1000).toFixed(1)}k chars</span>
+                </div>
               </div>
             )}
           </div>

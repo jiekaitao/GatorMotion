@@ -112,16 +112,24 @@ def health():
 
 def decode_frame(data: str) -> np.ndarray:
     """Decode a base64-encoded JPEG into an RGB numpy array."""
+    if not data:
+        raise ValueError("Empty frame data")
     raw = base64.b64decode(data)
     arr = np.frombuffer(raw, dtype=np.uint8)
     bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise ValueError("Failed to decode JPEG frame")
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
 def decode_frame_bytes(data: bytes) -> np.ndarray:
     """Decode raw JPEG bytes into an RGB numpy array."""
+    if not data:
+        raise ValueError("Empty frame data")
     arr = np.frombuffer(data, dtype=np.uint8)
     bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise ValueError("Failed to decode JPEG frame")
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
@@ -194,10 +202,17 @@ async def ws_track(websocket: WebSocket):
         while True:
             msg = await websocket.receive()
 
-            if "bytes" in msg and msg["bytes"]:
-                rgb = decode_frame_bytes(msg["bytes"])
-            else:
-                rgb = decode_frame(msg.get("text", ""))
+            if msg.get("type") == "websocket.disconnect":
+                break
+
+            try:
+                if "bytes" in msg and msg["bytes"]:
+                    rgb = decode_frame_bytes(msg["bytes"])
+                else:
+                    rgb = decode_frame(msg.get("text", ""))
+            except (ValueError, Exception) as e:
+                await websocket.send_json({"error": str(e)})
+                continue
 
             response = await _process_frame(rgb, detectors)
             await websocket.send_json(response)
@@ -225,10 +240,18 @@ async def ws_exercise(websocket: WebSocket):
         while True:
             msg = await websocket.receive()
 
-            if "bytes" in msg and msg["bytes"]:
-                rgb = decode_frame_bytes(msg["bytes"])
-            else:
-                rgb = decode_frame(msg.get("text", ""))
+            # Handle disconnect messages
+            if msg.get("type") == "websocket.disconnect":
+                break
+
+            try:
+                if "bytes" in msg and msg["bytes"]:
+                    rgb = decode_frame_bytes(msg["bytes"])
+                else:
+                    rgb = decode_frame(msg.get("text", ""))
+            except (ValueError, Exception) as e:
+                await websocket.send_json({"error": str(e)})
+                continue
 
             h, w = rgb.shape[:2]
 
@@ -274,7 +297,7 @@ async def ws_exercise(websocket: WebSocket):
 
                 flm_objects = [FLM(d) for d in face_lms]
                 result = pain_detector.update(flm_objects, w, h)
-                pain_status = {"level": result[0], "message": result[1]}
+                pain_status = {"level": result[0], "message": result[1], "ear": round(result[2], 4), "mar": round(result[3], 4)}
 
             response = {
                 **tracking,

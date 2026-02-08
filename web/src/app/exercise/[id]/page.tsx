@@ -6,6 +6,7 @@ import CameraFeed from "@/components/CameraFeed";
 import PoseOverlay from "@/components/PoseOverlay";
 import SkeletonViewer from "@/components/SkeletonViewer";
 import { useExerciseWebSocket } from "@/hooks/useExerciseWebSocket";
+import { useTtsIntro } from "@/hooks/useTtsIntro";
 import confetti from "canvas-confetti";
 import {
   X,
@@ -75,6 +76,9 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const [countdownNum, setCountdownNum] = useState(3);
   const [countdownText, setCountdownText] = useState<string | null>(null);
   const countdownKeyRef = useRef(0);
+
+  // TTS intro
+  useTtsIntro(phase, name);
 
   // Hero expansion
   const [heroExpanded, setHeroExpanded] = useState(false);

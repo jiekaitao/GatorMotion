@@ -8,6 +8,7 @@ services:
       - MONGODB_URI=${MONGODB_URI}
       - JWT_SECRET=${JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
     networks:
       - internal
     restart: unless-stopped

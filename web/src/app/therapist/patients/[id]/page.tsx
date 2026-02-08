@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, use, FormEvent } from "react"
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Check, Calendar, Dumbbell, Minus, Plus, Send, MessageCircle } from "lucide-react";
 import SkeletonViewer from "@/components/SkeletonViewer";
+import { showToast } from "@/components/Toast";
 
 interface Exercise {
   _id: string;
@@ -60,7 +61,6 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
   const [error, setError] = useState("");
 
   // Chat state
@@ -183,11 +183,10 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
       if (!res.ok) {
         setError(data.error || "Failed to assign");
       } else {
-        setSuccessMsg("Exercises assigned!");
+        showToast("Exercises assigned!", "success");
         setSelected(new Set());
         const patientData = await fetch(`/api/patients/${id}`).then((r) => r.json());
         setTodayAssignment(patientData.todayAssignment);
-        setTimeout(() => setSuccessMsg(""), 4000);
       }
     } catch {
       setError("Something went wrong");
@@ -205,58 +204,56 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
   }
 
   return (
-    <div style={{ width: "100%", padding: "var(--space-md) var(--space-xl)", paddingBottom: "var(--space-xl)" }}>
+    <div style={{ width: "100%", padding: "var(--space-lg) var(--space-xl)", paddingBottom: "var(--space-xl)" }}>
       {/* Back button */}
       <button
         onClick={() => router.push("/therapist/patients")}
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: 4,
+          gap: 6,
           color: "var(--color-gray-400)",
           background: "none",
           border: "none",
           cursor: "pointer",
-          fontSize: "var(--text-small)",
+          fontSize: "15px",
           fontWeight: 600,
-          marginBottom: "var(--space-md)",
+          marginBottom: "var(--space-lg)",
           padding: 0,
         }}
       >
-        <ChevronLeft size={18} /> Back to Patients
+        <ChevronLeft size={20} /> Back to Patients
       </button>
 
-      {/* Two-column layout: Left content + Chat */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: "var(--space-xl)", alignItems: "start" }}>
-        {/* LEFT: Patient info + Assignment + Exercises */}
-        <div>
+      {/* Patient header */}
       {patient && (
-        <div className="animate-in" style={{ marginBottom: "var(--space-xl)" }}>
-          <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800 }}>{patient.name}</h1>
-          <p className="text-small" style={{ marginTop: 4 }}>@{patient.username}</p>
+        <div className="animate-in" style={{ marginBottom: "var(--space-lg)" }}>
+          <h1 style={{ fontSize: "32px", fontWeight: 800, margin: 0 }}>{patient.name}</h1>
+          <p style={{ fontSize: "15px", color: "var(--color-gray-300)", marginTop: 4 }}>@{patient.username}</p>
         </div>
       )}
 
-      {/* Current Assignment */}
+      {/* Today's Assignment */}
       {todayAssignment && (
-        <div className="card animate-in" style={{ marginBottom: "var(--space-xl)", animationDelay: "60ms" }}>
-          <h3 style={{ fontWeight: 700, marginBottom: "var(--space-md)" }}>Today&apos;s Assignment</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+        <div className="card animate-in" style={{ marginBottom: "var(--space-xl)", animationDelay: "60ms", padding: "var(--space-lg)" }}>
+          <h3 style={{ fontWeight: 700, fontSize: "18px", marginBottom: "var(--space-md)" }}>Today&apos;s Assignment</h3>
+          <div style={{ display: "flex", gap: "var(--space-md)", flexWrap: "wrap" }}>
             {todayAssignment.exercises.map((ex, i) => (
               <div
                 key={i}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "var(--space-md)",
-                  padding: "var(--space-sm) 0",
-                  borderBottom: i < todayAssignment.exercises.length - 1 ? "1px solid var(--color-gray-100)" : "none",
+                  gap: 8,
+                  padding: "8px 16px",
+                  borderRadius: "var(--radius-xl)",
+                  backgroundColor: ex.completed ? "var(--color-green-surface)" : "var(--color-snow)",
                 }}
               >
                 <div
                   style={{
-                    width: 24,
-                    height: 24,
+                    width: 22,
+                    height: 22,
                     borderRadius: "var(--radius-full)",
                     backgroundColor: ex.completed ? "var(--color-green)" : "var(--color-gray-100)",
                     display: "flex",
@@ -265,9 +262,9 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                     flexShrink: 0,
                   }}
                 >
-                  {ex.completed && <Check size={14} color="white" />}
+                  {ex.completed && <Check size={13} color="white" />}
                 </div>
-                <span style={{ fontWeight: 600, color: ex.completed ? "var(--color-gray-300)" : "var(--color-gray-600)", textDecoration: ex.completed ? "line-through" : "none" }}>
+                <span style={{ fontWeight: 600, fontSize: "15px", color: ex.completed ? "var(--color-gray-300)" : "var(--color-gray-600)", textDecoration: ex.completed ? "line-through" : "none" }}>
                   {ex.exerciseName}
                 </span>
               </div>
@@ -275,51 +272,35 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       )}
+
+      {/* Two-column layout: Assign Exercises + Chat */}
+      <div style={{ display: "grid", gridTemplateColumns: "540px 0.8fr", gap: "var(--space-xl)", alignItems: "stretch" }}>
         {/* LEFT: Assign Exercises */}
         <div className="animate-in" style={{ animationDelay: "120ms" }}>
-          <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-sm)" }}>
-            Assign Exercises
-          </h3>
-          <p className="text-small" style={{ marginBottom: "var(--space-lg)" }}>
-            Select exercises and choose when {patient?.name.split(" ")[0] || "the patient"} should complete them.
-          </p>
-
-          {/* Due date picker */}
-          <div className="card" style={{ marginBottom: "var(--space-xl)", display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
-            <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: "var(--radius-md)",
-              backgroundColor: "var(--color-blue-light)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}>
-              <Calendar size={22} color="var(--color-blue)" />
-            </div>
-            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
-              <label style={{ fontSize: "var(--text-tiny)", fontWeight: 700, color: "var(--color-gray-400)", textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
-                Due date
-              </label>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-lg)", flexWrap: "wrap", gap: "var(--space-md)" }}>
+            <h3 style={{ fontSize: "24px", fontWeight: 800, margin: 0 }}>
+              Assign Exercises
+            </h3>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+              <Calendar size={18} color="var(--color-blue)" />
               <input
                 type="date"
                 className="input"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                style={{ maxWidth: 200, padding: "8px 12px" }}
+                style={{ padding: "8px 12px", fontSize: "15px" }}
               />
+              {date === new Date().toISOString().split("T")[0] && (
+                <span style={{ fontSize: "13px", color: "var(--color-gray-300)", fontWeight: 600 }}>Today</span>
+              )}
             </div>
-            <span className="text-tiny" style={{ color: "var(--color-gray-300)", marginLeft: "var(--space-md)" }}>
-              {date === new Date().toISOString().split("T")[0] ? "Today" : ""}
-            </span>
           </div>
 
           {/* Exercise cards */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
-            gap: "var(--space-md)",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: "var(--space-lg)",
             marginBottom: "var(--space-xl)",
           }}>
             {exercises.map((ex) => {
@@ -349,10 +330,10 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                     onClick={() => toggleExercise(ex._id)}
                     style={{
                       position: "absolute",
-                      top: 8,
-                      right: 8,
-                      width: 26,
-                      height: 26,
+                      top: 10,
+                      right: 10,
+                      width: 30,
+                      height: 30,
                       borderRadius: "var(--radius-full)",
                       border: `2px solid ${isSelected ? "var(--color-primary)" : "rgba(255,255,255,0.6)"}`,
                       backgroundColor: isSelected ? "var(--color-primary)" : "rgba(255,255,255,0.3)",
@@ -363,7 +344,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                       backdropFilter: "blur(4px)",
                     }}
                   >
-                    {isSelected && <Check size={14} color="white" strokeWidth={3} />}
+                    {isSelected && <Check size={16} color="white" strokeWidth={3} />}
                   </div>
 
                   {/* Clickable area */}
@@ -371,7 +352,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                     {/* Skeleton preview or placeholder */}
                     <div style={{
                       width: "100%",
-                      aspectRatio: "3/4",
+                      aspectRatio: "1/1",
                       backgroundColor: ex.skeletonDataFile ? "#1a1a2e" : "var(--color-snow)",
                       display: "flex",
                       alignItems: "center",
@@ -393,11 +374,11 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
-                          gap: 8,
+                          gap: 10,
                         }}>
-                          <Dumbbell size={36} color="var(--color-gray-200)" />
+                          <Dumbbell size={44} color="var(--color-gray-200)" />
                           <span style={{
-                            fontSize: "11px",
+                            fontSize: "13px",
                             fontWeight: 700,
                             color: "var(--color-gray-300)",
                             textTransform: "uppercase",
@@ -410,21 +391,20 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Info */}
-                    <div style={{ padding: "12px 14px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-                      <div style={{ fontWeight: 800, fontSize: "15px", lineHeight: 1.2 }}>{ex.name}</div>
+                    <div style={{ padding: "16px 18px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ fontWeight: 800, fontSize: "18px", lineHeight: 1.2 }}>{ex.name}</div>
                       <div style={{
-                        fontSize: "12px",
+                        fontSize: "14px",
                         color: "var(--color-gray-400)",
-                        lineHeight: 1.3,
+                        lineHeight: 1.4,
                         display: "-webkit-box",
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: "vertical" as const,
                         overflow: "hidden",
-                        minHeight: "2.6em",
                       }}>
                         {ex.description}
                       </div>
-                      <div style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-gray-300)", marginTop: 2 }}>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-gray-300)", marginTop: 2 }}>
                         {cfg?.sets ?? ex.defaultSets} sets &middot; {cfg?.reps ?? ex.defaultReps} reps
                       </div>
                     </div>
@@ -433,35 +413,35 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                   {/* Expandable config panel */}
                   <div
                     style={{
-                      maxHeight: isSelected ? 80 : 0,
+                      maxHeight: isSelected ? 90 : 0,
                       opacity: isSelected ? 1 : 0,
                       overflow: "hidden",
                       transition: "max-height 0.3s ease, opacity 0.2s ease",
                       borderTop: isSelected ? "1px solid var(--color-gray-100)" : "none",
                     }}
                   >
-                    <div style={{ padding: "10px 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ padding: "12px 18px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-gray-400)" }}>Sets</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-gray-400)" }}>Sets</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "sets", -1); }} className="stepper-btn">
-                            <Minus size={14} />
+                            <Minus size={16} />
                           </button>
-                          <span style={{ fontSize: "14px", fontWeight: 700, minWidth: 20, textAlign: "center" }}>{cfg?.sets ?? ex.defaultSets}</span>
+                          <span style={{ fontSize: "16px", fontWeight: 700, minWidth: 24, textAlign: "center" }}>{cfg?.sets ?? ex.defaultSets}</span>
                           <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "sets", 1); }} className="stepper-btn">
-                            <Plus size={14} />
+                            <Plus size={16} />
                           </button>
                         </div>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-gray-400)" }}>Reps</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-gray-400)" }}>Reps</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "reps", -1); }} className="stepper-btn">
-                            <Minus size={14} />
+                            <Minus size={16} />
                           </button>
-                          <span style={{ fontSize: "14px", fontWeight: 700, minWidth: 20, textAlign: "center" }}>{cfg?.reps ?? ex.defaultReps}</span>
+                          <span style={{ fontSize: "16px", fontWeight: 700, minWidth: 24, textAlign: "center" }}>{cfg?.reps ?? ex.defaultReps}</span>
                           <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "reps", 1); }} className="stepper-btn">
-                            <Plus size={14} />
+                            <Plus size={16} />
                           </button>
                         </div>
                       </div>
@@ -473,30 +453,18 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
           </div>
 
           {error && (
-            <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600, marginBottom: "var(--space-md)" }}>{error}</p>
-          )}
-          {successMsg && (
-            <p style={{
-              color: "var(--color-green-dark)",
-              fontSize: "14px",
-              fontWeight: 600,
-              marginBottom: "var(--space-md)",
-              backgroundColor: "var(--color-green-surface)",
-              padding: "8px 12px",
-              borderRadius: "var(--radius-sm)",
-            }}>{successMsg}</p>
+            <p style={{ color: "var(--color-red)", fontSize: "15px", fontWeight: 600, marginBottom: "var(--space-md)" }}>{error}</p>
           )}
 
           <button
             className="btn btn-primary btn-full"
             disabled={selected.size === 0 || assigning}
             onClick={handleAssign}
-            style={{ borderRadius: "var(--radius-xl)" }}
+            style={{ borderRadius: "var(--radius-xl)", fontSize: "16px", padding: "14px 24px" }}
           >
             {assigning ? "Assigning..." : `Assign Selected (${selected.size})`}
           </button>
         </div>
-        </div>{/* end left column */}
 
         {/* RIGHT: Chat with Patient */}
         <div
@@ -505,9 +473,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             animationDelay: "180ms",
             display: "flex",
             flexDirection: "column",
-            height: 500,
-            position: "sticky",
-            top: "var(--space-md)",
+            minHeight: 0,
             borderRadius: "var(--radius-lg)",
             border: "2px solid var(--color-gray-100)",
             backgroundColor: "var(--color-white)",
@@ -516,15 +482,15 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
         >
           {/* Chat header */}
           <div style={{
-            padding: "var(--space-md)",
+            padding: "var(--space-md) var(--space-lg)",
             borderBottom: "2px solid var(--color-gray-100)",
             display: "flex",
             alignItems: "center",
             gap: "var(--space-sm)",
             flexShrink: 0,
           }}>
-            <MessageCircle size={18} color="var(--color-primary)" />
-            <span style={{ fontWeight: 700, fontSize: "14px" }}>
+            <MessageCircle size={20} color="var(--color-primary)" />
+            <span style={{ fontWeight: 700, fontSize: "16px" }}>
               Chat with {patient?.name.split(" ")[0] || "Patient"}
             </span>
           </div>
@@ -533,16 +499,16 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
           <div style={{
             flex: 1,
             overflowY: "auto",
-            padding: "var(--space-md)",
+            padding: "var(--space-md) var(--space-lg)",
             display: "flex",
             flexDirection: "column",
             gap: "var(--space-sm)",
           }}>
             {messages.length === 0 && (
-              <div style={{ textAlign: "center", color: "var(--color-gray-300)", marginTop: "var(--space-2xl)", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <MessageCircle size={36} style={{ marginBottom: "var(--space-sm)", opacity: 0.3 }} />
-                <p style={{ fontWeight: 600, fontSize: "13px" }}>No messages yet</p>
-                <p style={{ fontSize: "12px", marginTop: 4, color: "var(--color-gray-200)" }}>Send a message to start the conversation.</p>
+              <div style={{ textAlign: "center", color: "var(--color-gray-300)", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <MessageCircle size={44} style={{ marginBottom: "var(--space-md)", opacity: 0.3 }} />
+                <p style={{ fontWeight: 600, fontSize: "15px" }}>No messages yet</p>
+                <p style={{ fontSize: "14px", marginTop: 6, color: "var(--color-gray-200)" }}>Send a message to start the conversation.</p>
               </div>
             )}
             {messages.map((msg) => (
@@ -556,17 +522,17 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                 <div
                   style={{
                     maxWidth: "85%",
-                    padding: "8px 12px",
-                    borderRadius: msg.isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                    padding: "10px 14px",
+                    borderRadius: msg.isMine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                     backgroundColor: msg.isMine ? "var(--color-primary)" : "var(--color-snow)",
                     color: msg.isMine ? "white" : "var(--color-gray-600)",
-                    fontSize: "13px",
+                    fontSize: "15px",
                     lineHeight: 1.4,
                     wordBreak: "break-word",
                   }}
                 >
                   {msg.content}
-                  <div style={{ fontSize: "10px", marginTop: 3, opacity: 0.5, textAlign: "right" }}>
+                  <div style={{ fontSize: "11px", marginTop: 4, opacity: 0.5, textAlign: "right" }}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </div>
                 </div>
@@ -581,7 +547,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             style={{
               display: "flex",
               gap: "var(--space-sm)",
-              padding: "var(--space-sm) var(--space-md)",
+              padding: "var(--space-md) var(--space-lg)",
               borderTop: "2px solid var(--color-gray-100)",
               flexShrink: 0,
             }}
@@ -592,15 +558,15 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
               placeholder="Type a message..."
               value={newMsg}
               onChange={(e) => setNewMsg(e.target.value)}
-              style={{ flex: 1, fontSize: "13px", padding: "8px 12px" }}
+              style={{ flex: 1, fontSize: "15px", padding: "10px 14px" }}
             />
             <button
               type="submit"
               className="btn btn-teal"
               disabled={sending || !newMsg.trim()}
-              style={{ padding: "8px 12px" }}
+              style={{ padding: "10px 14px" }}
             >
-              <Send size={16} />
+              <Send size={18} />
             </button>
           </form>
         </div>

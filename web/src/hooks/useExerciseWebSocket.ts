@@ -16,6 +16,8 @@ interface ExerciseStatus {
 interface PainStatus {
   level: string;
   message: string;
+  ear?: number;
+  mar?: number;
 }
 
 export interface PoseLandmark {
@@ -38,6 +40,10 @@ interface UseExerciseWebSocketResult {
   formQuality: string;
   painLevel: string;
   painMessage: string;
+  ear: number;
+  mar: number;
+  angle: number;
+  repState: string;
   landmarksRef: React.RefObject<LandmarkFrame>;
   startCapture: (videoElement: HTMLVideoElement) => void;
   stopCapture: () => void;
@@ -55,6 +61,10 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [formQuality, setFormQuality] = useState("neutral");
   const [painLevel, setPainLevel] = useState("normal");
   const [painMessage, setPainMessage] = useState("");
+  const [ear, setEar] = useState(0);
+  const [mar, setMar] = useState(0);
+  const [angle, setAngle] = useState(0);
+  const [repState, setRepState] = useState("waiting");
 
   const lastUiUpdateRef = useRef(0);
   const landmarksRef = useRef<LandmarkFrame>({
@@ -102,68 +112,95 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
         : []),
     ];
 
-    let urlIdx = 0;
     let stopped = false;
+    let retryDelay = 1000;
+    const MAX_RETRY_DELAY = 10000;
 
     function tryConnect() {
-      if (stopped || urlIdx >= urls.length) return;
+      if (stopped) return;
 
-      const ws = new WebSocket(urls[urlIdx]);
-      wsRef.current = ws;
+      let urlIdx = 0;
 
-      const timeout = setTimeout(() => ws.close(), 3000);
+      function attemptUrl() {
+        if (stopped || urlIdx >= urls.length) {
+          // All URLs failed — schedule retry with backoff
+          if (!stopped) {
+            setTimeout(() => {
+              retryDelay = Math.min(retryDelay * 1.5, MAX_RETRY_DELAY);
+              tryConnect();
+            }, retryDelay);
+          }
+          return;
+        }
 
-      ws.onopen = () => {
-        clearTimeout(timeout);
-        setConnected(true);
-      };
+        const ws = new WebSocket(urls[urlIdx]);
+        wsRef.current = ws;
 
-      ws.onmessage = (event) => {
-        pendingRef.current = false;
-        const data = JSON.parse(event.data);
+        const timeout = setTimeout(() => ws.close(), 5000);
 
-        const exercise: ExerciseStatus | undefined = data.exercise;
-        const pain: PainStatus | undefined = data.pain;
+        ws.onopen = () => {
+          clearTimeout(timeout);
+          retryDelay = 1000; // reset backoff on success
+          setConnected(true);
+        };
 
-        // Update landmark ref every frame (no React re-render)
-        const pose: PoseLandmark[][] | undefined = data.pose;
-        if (pose && pose.length > 0 && pose[0].length > 0) {
+        ws.onmessage = (event) => {
+          pendingRef.current = false;
+          const data = JSON.parse(event.data);
+
+          const exercise: ExerciseStatus | undefined = data.exercise;
+          const pain: PainStatus | undefined = data.pain;
+
+          // Update landmark ref every frame (no React re-render)
+          const pose: PoseLandmark[][] | undefined = data.pose;
+          if (pose && pose.length > 0 && pose[0].length > 0) {
+            const now = performance.now();
+            landmarksRef.current = {
+              prev: landmarksRef.current.current,
+              current: pose[0],
+              prevTime: landmarksRef.current.currentTime,
+              currentTime: now,
+            };
+          }
+
+          // Throttle React state updates to ~4/sec
           const now = performance.now();
-          landmarksRef.current = {
-            prev: landmarksRef.current.current,
-            current: pose[0],
-            prevTime: landmarksRef.current.currentTime,
-            currentTime: now,
-          };
-        }
-
-        // Throttle React state updates to ~4/sec
-        const now = performance.now();
-        if (now - lastUiUpdateRef.current > 250) {
-          if (exercise) {
-            setRepCount(exercise.rep_count);
-            setFormQuality(exercise.form_quality);
+          if (now - lastUiUpdateRef.current > 250) {
+            if (exercise) {
+              setRepCount(exercise.rep_count);
+              setFormQuality(exercise.form_quality);
+              setAngle(exercise.angle);
+              setRepState(exercise.state);
+            }
+            if (pain) {
+              setPainLevel(pain.level);
+              setPainMessage(pain.message);
+              if (pain.ear !== undefined) setEar(pain.ear);
+              if (pain.mar !== undefined) setMar(pain.mar);
+            }
+            lastUiUpdateRef.current = now;
           }
-          if (pain) {
-            setPainLevel(pain.level);
-            setPainMessage(pain.message);
+        };
+
+        ws.onclose = () => {
+          clearTimeout(timeout);
+          setConnected(false);
+          wsRef.current = null;
+          // Reconnect after unexpected close (not during cleanup)
+          if (!stopped) {
+            setTimeout(tryConnect, retryDelay);
           }
-          lastUiUpdateRef.current = now;
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        clearTimeout(timeout);
-        setConnected(false);
-        wsRef.current = null;
-      };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          ws.close();
+          urlIdx++;
+          attemptUrl();
+        };
+      }
 
-      ws.onerror = () => {
-        clearTimeout(timeout);
-        ws.close();
-        urlIdx++;
-        tryConnect();
-      };
+      attemptUrl();
     }
 
     tryConnect();
@@ -206,6 +243,10 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     formQuality,
     painLevel,
     painMessage,
+    ear,
+    mar,
+    angle,
+    repState,
     landmarksRef,
     startCapture,
     stopCapture,
