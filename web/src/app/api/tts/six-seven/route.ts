@@ -11,34 +11,44 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY!;
  */
 const SIX_SEVEN_CLIPS = [
   {
+    id: "bedsheets",
+    text: "How many times did you wash your bed sheets this year? Like... six or seven times.",
+    voiceId: "ErXwobaYiN019PkySvjV", // Antoni — deadpan chill
+  },
+  {
+    id: "braincells",
+    text: "How many brain cells did that rep just cost you? I'd say about six... seven.",
+    voiceId: "pNInz6obpgDQGcFmaJgB", // Adam — deep dramatic deadpan
+  },
+  {
+    id: "chaos",
+    text: "OH MY GOD! SIX SEVEN! SIX SEVEN! HE JUST HIT THE SIX SEVEN!",
+    voiceId: "jBpfuIE2acCO8z3wKNLl", // Gigi — pure chaotic energy
+  },
+  {
+    id: "onerep",
+    text: "How many times have you said one more rep and not meant it? Six or seven.",
+    voiceId: "onwK4e9ZLuTAKqWW03F9", // Daniel — dry British delivery
+  },
+  {
+    id: "tabs",
+    text: "How many tabs do you have open right now instead of focusing on your exercises? About six... seven.",
+    voiceId: "TxGEqnHWrfWFTfGW9XjX", // Josh — casual matter-of-fact
+  },
+  {
+    id: "bones",
+    text: "How many bones just popped doing that? Six. Seven. Maybe eight, but who's counting.",
+    voiceId: "pNInz6obpgDQGcFmaJgB", // Adam — dramatic deadpan
+  },
+  {
     id: "hype",
-    text: "SIX SEVEN! SIX SEVEN on the HIGHWAY! Bip bip!",
-    voiceId: "VR6AewLTigWG4xSOukaG", // Arnold — gravelly hype man
+    text: "SIX! SEVEN! SIX SEVEN IN PHYSICAL THERAPY! THIS IS HISTORY!",
+    voiceId: "jBpfuIE2acCO8z3wKNLl", // Gigi — unhinged excitement
   },
   {
-    id: "chill",
-    text: "Yo… did you just hit the 6-7? In physical therapy? That's actually legendary.",
-    voiceId: "ErXwobaYiN019PkySvjV", // Antoni — chill young male
-  },
-  {
-    id: "doot",
-    text: "Doot doot! Six, seven! I just bipped right on the highway!",
-    voiceId: "TxGEqnHWrfWFTfGW9XjX", // Josh — energetic male
-  },
-  {
-    id: "british",
-    text: "Oh my. Was that a 6-7? During a medical exercise? Absolutely brilliant.",
-    voiceId: "onwK4e9ZLuTAKqWW03F9", // Daniel — British gentleman
-  },
-  {
-    id: "excited",
-    text: "OH MY GOD, SIX SEVEN! You're not doing physical therapy, you're making history!",
-    voiceId: "jBpfuIE2acCO8z3wKNLl", // Gigi — excited, higher pitch
-  },
-  {
-    id: "deep",
-    text: "Six. Seven. The prophecy has been fulfilled.",
-    voiceId: "pNInz6obpgDQGcFmaJgB", // Adam — deep dramatic
+    id: "coffee",
+    text: "How many times did you reheat that same cup of coffee today? Six or seven.",
+    voiceId: "ErXwobaYiN019PkySvjV", // Antoni — relatable deadpan
   },
 ];
 
