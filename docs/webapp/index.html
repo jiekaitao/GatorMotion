@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>GatorMotion</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <canvas id="videoCanvas"></canvas>
+  <canvas id="skeletonCanvas"></canvas>
+
+  <div id="controls">
+    <div id="statusBar">Loading MediaPipe...</div>
+    <button id="toggleBtn">Start Tracking</button>
+  </div>
+
+  <script src="js/bridge.js"></script>
+  <script src="js/mediapipe-runner.js"></script>
+  <script src="js/skeleton-renderer.js"></script>
+  <script src="js/skeleton-packet.js"></script>
+  <script src="js/websocket-client.js"></script>
+  <script src="js/frame-pipeline.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
