@@ -1,0 +1,7 @@
+platform :ios, '14.0'
+
+use_frameworks!
+
+target 'PhysioLiDAR' do
+  # MediaPipe now runs as WASM in the web app — no native pod needed
+end

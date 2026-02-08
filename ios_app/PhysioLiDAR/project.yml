@@ -40,8 +40,18 @@ targets:
       - path: .
         excludes:
           - "project.yml"
+          - "Podfile"
+          - "Podfile.lock"
+          - "Pods/**"
+          - "PhysioLiDAR.xcworkspace/**"
           - "PhysioLiDAR.xcodeproj/**"
           - "build/**"
+          - "webapp/**"
+          - "Models/**"
+          - "ARBodyTrackingView.swift"
+    resources:
+      - path: webapp
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gatormotion.PhysioLiDAR

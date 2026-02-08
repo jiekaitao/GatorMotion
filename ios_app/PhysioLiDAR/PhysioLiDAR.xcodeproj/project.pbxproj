@@ -7,22 +7,56 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		192FE9AAD0296298ABBAE8A7 /* ARBodyTrackingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_3E0B8646-0600-4329-9F04-3AC80BF15DC9" /* ARBodyTrackingView.swift */; };
-		557DEF632155A4B6E62B6DCF /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_19B847EF-2553-4C8C-8D3A-F1090831EA86" /* WebSocketClient.swift */; };
-		9D0129D0F0BB703D26B6C75D /* PhysioLiDARApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_F2BA578D-DBAE-4B83-84C9-6D2EF34BA7F2" /* PhysioLiDARApp.swift */; };
-		F5931559A5BA8A3533C574EF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = "TEMP_0AC266B6-874F-418A-85A5-0C1FD4A4E896" /* ContentView.swift */; };
+		14F09BB17CBF3F28C5970892 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_A15D052B-A3E8-4313-B911-E2EF3574C644 /* WebSocketClient.swift */; };
+		2287E14F08B00B7B2F744E6D /* HybridCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_0FA6C3F8-4096-422F-A633-BF3BEF5E01DD /* HybridCaptureManager.swift */; };
+		4148F454482DC85A0F550B8C /* Pods_PhysioLiDAR.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B809484753F9235118E613C0 /* Pods_PhysioLiDAR.framework */; };
+		6D87B68707011DD9CBAA34B5 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_3F5EB124-C19A-4D10-8687-2365CE6FB7FA /* ContentView.swift */; };
+		C8A59791F9C0514EFE5FCF24 /* PhysioLiDARApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_063CEE03-C634-49D7-87CB-D724DDAF0321 /* PhysioLiDARApp.swift */; };
+		F3855A1D56778C6D33723ADE /* NativeBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = TEMP_278CB7EE-3F62-4584-AE1A-43C182D38936 /* NativeBridge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		826A5DA77BB759248711F3C6 /* Pods-PhysioLiDAR.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PhysioLiDAR.debug.xcconfig"; path = "Target Support Files/Pods-PhysioLiDAR/Pods-PhysioLiDAR.debug.xcconfig"; sourceTree = "<group>"; };
+		B15664B31C84DA08E493D993 /* Pods-PhysioLiDAR.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PhysioLiDAR.release.xcconfig"; path = "Target Support Files/Pods-PhysioLiDAR/Pods-PhysioLiDAR.release.xcconfig"; sourceTree = "<group>"; };
+		B809484753F9235118E613C0 /* Pods_PhysioLiDAR.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_PhysioLiDAR.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF8A58D7D9B673DCA6EFEBC9 /* PhysioLiDAR.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = PhysioLiDAR.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		"TEMP_0AC266B6-874F-418A-85A5-0C1FD4A4E896" /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		"TEMP_1602F60C-4684-44A2-8B8E-E8F50C08A967" /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		"TEMP_19B847EF-2553-4C8C-8D3A-F1090831EA86" /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
-		"TEMP_3E0B8646-0600-4329-9F04-3AC80BF15DC9" /* ARBodyTrackingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ARBodyTrackingView.swift; sourceTree = "<group>"; };
-		"TEMP_F2BA578D-DBAE-4B83-84C9-6D2EF34BA7F2" /* PhysioLiDARApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhysioLiDARApp.swift; sourceTree = "<group>"; };
+		TEMP_063CEE03-C634-49D7-87CB-D724DDAF0321 /* PhysioLiDARApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhysioLiDARApp.swift; sourceTree = "<group>"; };
+		TEMP_0FA6C3F8-4096-422F-A633-BF3BEF5E01DD /* HybridCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HybridCaptureManager.swift; sourceTree = "<group>"; };
+		TEMP_278CB7EE-3F62-4584-AE1A-43C182D38936 /* NativeBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBridge.swift; sourceTree = "<group>"; };
+		TEMP_3F5EB124-C19A-4D10-8687-2365CE6FB7FA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		TEMP_A15D052B-A3E8-4313-B911-E2EF3574C644 /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		7D8560BE17F1560732E9F130 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4148F454482DC85A0F550B8C /* Pods_PhysioLiDAR.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
+		2B0306342322F34DA61A7540 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				826A5DA77BB759248711F3C6 /* Pods-PhysioLiDAR.debug.xcconfig */,
+				B15664B31C84DA08E493D993 /* Pods-PhysioLiDAR.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		2DA264D9F3FF7E8CC81C956D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B809484753F9235118E613C0 /* Pods_PhysioLiDAR.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		7EB80DB5ECEEEC37EEE65662 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -35,19 +69,9 @@
 			isa = PBXGroup;
 			children = (
 				7EB80DB5ECEEEC37EEE65662 /* Products */,
+				2B0306342322F34DA61A7540 /* Pods */,
+				2DA264D9F3FF7E8CC81C956D /* Frameworks */,
 			);
-			sourceTree = "<group>";
-		};
-		"TEMP_97F63818-CE9E-4189-88AE-42A85AC67CE2" /* PhysioLiDAR */ = {
-			isa = PBXGroup;
-			children = (
-				"TEMP_3E0B8646-0600-4329-9F04-3AC80BF15DC9" /* ARBodyTrackingView.swift */,
-				"TEMP_19B847EF-2553-4C8C-8D3A-F1090831EA86" /* WebSocketClient.swift */,
-				"TEMP_F2BA578D-DBAE-4B83-84C9-6D2EF34BA7F2" /* PhysioLiDARApp.swift */,
-				"TEMP_0AC266B6-874F-418A-85A5-0C1FD4A4E896" /* ContentView.swift */,
-				"TEMP_1602F60C-4684-44A2-8B8E-E8F50C08A967" /* Info.plist */,
-			);
-			path = PhysioLiDAR;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -57,15 +81,15 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 15A6CF6D68A43A77D461836F /* Build configuration list for PBXNativeTarget "PhysioLiDAR" */;
 			buildPhases = (
+				443582BBAA27C4158A7CDCB8 /* [CP] Check Pods Manifest.lock */,
 				C509A7F75E76F19A2BC8DDE7 /* Sources */,
+				7D8560BE17F1560732E9F130 /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = PhysioLiDAR;
-			packageProductDependencies = (
-			);
 			productName = PhysioLiDAR;
 			productReference = FF8A58D7D9B673DCA6EFEBC9 /* PhysioLiDAR.app */;
 			productType = "com.apple.product-type.application";
@@ -96,6 +120,7 @@
 			mainGroup = A4F453EFF8FE110828FCB00A;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 7EB80DB5ECEEEC37EEE65662 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -104,15 +129,41 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		443582BBAA27C4158A7CDCB8 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-PhysioLiDAR-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		C509A7F75E76F19A2BC8DDE7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				192FE9AAD0296298ABBAE8A7 /* ARBodyTrackingView.swift in Sources */,
-				F5931559A5BA8A3533C574EF /* ContentView.swift in Sources */,
-				9D0129D0F0BB703D26B6C75D /* PhysioLiDARApp.swift in Sources */,
-				557DEF632155A4B6E62B6DCF /* WebSocketClient.swift in Sources */,
+				6D87B68707011DD9CBAA34B5 /* ContentView.swift in Sources */,
+				2287E14F08B00B7B2F744E6D /* HybridCaptureManager.swift in Sources */,
+				F3855A1D56778C6D33723ADE /* NativeBridge.swift in Sources */,
+				C8A59791F9C0514EFE5FCF24 /* PhysioLiDARApp.swift in Sources */,
+				14F09BB17CBF3F28C5970892 /* WebSocketClient.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +172,7 @@
 /* Begin XCBuildConfiguration section */
 		22A37E364557DB1912995B49 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 826A5DA77BB759248711F3C6 /* Pods-PhysioLiDAR.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -140,6 +192,7 @@
 		};
 		2D956FD57BCC3A6A3449D8E6 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B15664B31C84DA08E493D993 /* Pods-PhysioLiDAR.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";

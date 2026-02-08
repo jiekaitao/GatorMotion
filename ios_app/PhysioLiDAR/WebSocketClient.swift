@@ -1,5 +1,24 @@
 import Foundation
 import Network
+import CoreGraphics
+
+struct BodyPartDepth: Codable {
+    let landmarkId: Int
+    let name: String
+    let x: CGFloat
+    let y: CGFloat
+    let depth: Double
+    let distance_cm: Double
+
+    enum CodingKeys: String, CodingKey {
+        case landmarkId = "landmark_id"
+        case name
+        case x
+        case y
+        case depth
+        case distance_cm
+    }
+}
 
 struct SkeletonPacket: Codable {
     let device: String
@@ -21,6 +40,8 @@ struct SkeletonPacket: Codable {
     let videoFrameBase64: String?
     let videoWidth: Int?
     let videoHeight: Int?
+    let bodyPartDepths: [BodyPartDepth]?
+    let landmarkDepths: [BodyPartDepth]?
 
     enum CodingKeys: String, CodingKey {
         case device
@@ -42,6 +63,8 @@ struct SkeletonPacket: Codable {
         case videoFrameBase64 = "video_frame_base64"
         case videoWidth = "video_width"
         case videoHeight = "video_height"
+        case bodyPartDepths = "body_part_depths"
+        case landmarkDepths = "landmark_depths"
     }
 }
 
@@ -205,6 +228,15 @@ final class WebSocketClient: ObservableObject {
     private func refreshServerStatus() {
         DispatchQueue.main.async {
             self.statusText = self.listener == nil ? "Not connected" : "Tracking..."
+        }
+    }
+
+    func broadcastRaw(data: Data) {
+        guard !connections.isEmpty else { return }
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+        let context = NWConnection.ContentContext(identifier: "skeleton", metadata: [metadata])
+        for (_, connection) in connections {
+            connection.send(content: data, contentContext: context, isComplete: true, completion: .idempotent)
         }
     }
 
