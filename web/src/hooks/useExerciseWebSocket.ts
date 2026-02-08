@@ -71,6 +71,11 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [repState, setRepState] = useState("waiting");
   const [sixSevenTriggered, setSixSevenTriggered] = useState(false);
 
+  // Backend rep counter resets when websocket reconnects.
+  // Keep a cumulative offset so UI progress is monotonic.
+  const cumulativeRepOffsetRef = useRef(0);
+  const lastRawRepCountRef = useRef(0);
+
   const lastUiUpdateRef = useRef(0);
   const lastFaceSeenAtRef = useRef(0);
   const landmarksRef = useRef<LandmarkFrame>({
@@ -106,7 +111,51 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
 
   // Connect WebSocket
   useEffect(() => {
-    if (!exerciseKey) return;
+    if (!exerciseKey) {
+      setConnected(false);
+      setRepCount(0);
+      setFormQuality("neutral");
+      setPainLevel("normal");
+      setPainMessage("");
+      setFaceDetected(false);
+      setEar(0);
+      setMar(0);
+      setAngle(0);
+      setRepState("waiting");
+      cumulativeRepOffsetRef.current = 0;
+      lastRawRepCountRef.current = 0;
+      lastUiUpdateRef.current = 0;
+      lastFaceSeenAtRef.current = 0;
+      pendingRef.current = false;
+      landmarksRef.current = {
+        prev: null,
+        current: null,
+        prevTime: 0,
+        currentTime: 0,
+      };
+      return;
+    }
+
+    cumulativeRepOffsetRef.current = 0;
+    lastRawRepCountRef.current = 0;
+    lastUiUpdateRef.current = 0;
+    lastFaceSeenAtRef.current = 0;
+    pendingRef.current = false;
+    setRepCount(0);
+    setFormQuality("neutral");
+    setPainLevel("normal");
+    setPainMessage("");
+    setFaceDetected(false);
+    setEar(0);
+    setMar(0);
+    setAngle(0);
+    setRepState("waiting");
+    landmarksRef.current = {
+      prev: null,
+      current: null,
+      prevTime: 0,
+      currentTime: 0,
+    };
 
     const isSecure = window.location.protocol === "https:";
     const protocol = isSecure ? "wss:" : "ws:";
@@ -180,7 +229,12 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
           const uiNow = performance.now();
           if (uiNow - lastUiUpdateRef.current > 250) {
             if (exercise) {
-              setRepCount(exercise.rep_count);
+              const rawRepCount = exercise.rep_count;
+              if (rawRepCount < lastRawRepCountRef.current) {
+                cumulativeRepOffsetRef.current += lastRawRepCountRef.current;
+              }
+              lastRawRepCountRef.current = rawRepCount;
+              setRepCount(cumulativeRepOffsetRef.current + rawRepCount);
               setFormQuality(exercise.form_quality);
               setAngle(exercise.angle);
               setRepState(exercise.state);
@@ -234,6 +288,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
         wsRef.current.close();
         wsRef.current = null;
       }
+      pendingRef.current = false;
       setConnected(false);
       setFaceDetected(false);
     };

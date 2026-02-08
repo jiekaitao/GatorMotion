@@ -163,10 +163,9 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   useEffect(() => {
     if (!exerciseKey || phase !== "active" || paused || setBreakActive) return;
 
-    // Handle counter resets after reconnect.
+    // Handle counter resets after reconnect without losing in-set progress.
     if (wsRepCount < repOffset) {
-      setRepOffset(wsRepCount);
-      setCurrentRep(wsRepCount);
+      setRepOffset(wsRepCount - currentRep);
       return;
     }
 
