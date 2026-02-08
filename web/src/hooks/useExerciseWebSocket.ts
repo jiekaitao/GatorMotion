@@ -43,11 +43,17 @@ export interface CoachingMessage {
   text: string;
 }
 
+export interface RefLandmark {
+  x: number;
+  y: number;
+}
+
 export interface CoachingData {
   rms_divergence: number;
   quality: number;
   divergences: DivergenceEntry[];
   coaching_messages: CoachingMessage[];
+  ref_landmarks?: RefLandmark[];
 }
 
 export interface LandmarkFrame {

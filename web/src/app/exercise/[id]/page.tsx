@@ -815,7 +815,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         <div className="session-camera">
           <div style={{ width: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
             <CameraFeed active onVideoReady={handleVideoReady} />
-            <PoseOverlay landmarksRef={landmarksRef} coachingRef={coachingRef} active={phase === "active" && wsConnected} />
+            <PoseOverlay landmarksRef={landmarksRef} coachingRef={coachingRef} active={phase === "active" && wsConnected} debugMode={debugOpen} />
 
             {formBadge && (
               <div className="animate-bounce-gentle" style={{

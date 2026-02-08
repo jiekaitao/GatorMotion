@@ -127,7 +127,8 @@ class CoachV2Engine:
             quality (float 0-1),
             divergences (list of dicts with side, part, delta_x, delta_y, distance),
             coaching_messages (list of dicts with type, text),
-            rms_history (last 60 entries of {timeSec, rms})
+            rms_history (last 60 entries of {timeSec, rms}),
+            ref_landmarks (list of {x, y} dicts for the best-matched reference in image space)
         """
         norm, frame_info = normalize_to_body_frame(landmarks_xyzw)
         feat = feature_vector(norm, self.feature_landmarks)
@@ -157,6 +158,15 @@ class CoachV2Engine:
         else:
             # Not enough visible landmarks -- fall back to raw body-frame comparison
             ref_aligned = ref[:, :2].copy()
+
+        # Convert aligned reference from body-frame back to image space (0-1 normalized)
+        pelvis = frame_info["pelvis"]
+        x_axis = frame_info["x_axis"]
+        y_axis = frame_info["y_axis"]
+        hip_width = float(frame_info["scale"][0])
+        ref_image = np.zeros((33, 2), dtype=np.float32)
+        for i in range(33):
+            ref_image[i] = pelvis + (ref_aligned[i, 0] * x_axis + ref_aligned[i, 1] * y_axis) * hip_width
 
         # Compute per-joint divergence using exercise-specific correction landmarks
         divergences: list[dict[str, Any]] = []
@@ -223,10 +233,17 @@ class CoachV2Engine:
             for t, r in list(self.rms_history)[-60:]
         ]
 
+        # Build ref_landmarks in image space for frontend overlay
+        ref_lm_list = [
+            {"x": round(float(ref_image[i, 0]), 5), "y": round(float(ref_image[i, 1]), 5)}
+            for i in range(33)
+        ]
+
         return {
             "rms_divergence": round(float(rms_div), 4),
             "quality": round(float(quality_smooth), 3),
             "divergences": divergences,
             "coaching_messages": coaching_messages,
             "rms_history": rms_hist_list,
+            "ref_landmarks": ref_lm_list,
         }
