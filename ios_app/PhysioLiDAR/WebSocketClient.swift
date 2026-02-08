@@ -10,9 +10,14 @@ struct SkeletonPacket: Codable {
     let allJoints: [String: [Float]]?
     let keypoints2D: [String: [Float]]?
     let pointDepthsM: [String: Float]?
+    let cameraPosition: [Float]?
     let cameraIntrinsics: [Float]?
     let cameraWidth: Int?
     let cameraHeight: Int?
+    let armHeadDistanceM: Float?
+    let armHeadState: String?
+    let armHeadQuality: Float?
+    let armHeadSource: String?
     let videoFrameBase64: String?
     let videoWidth: Int?
     let videoHeight: Int?
@@ -26,9 +31,14 @@ struct SkeletonPacket: Codable {
         case allJoints = "all_joints"
         case keypoints2D = "keypoints_2d"
         case pointDepthsM = "point_depths_m"
+        case cameraPosition = "camera_position"
         case cameraIntrinsics = "camera_intrinsics"
         case cameraWidth = "camera_width"
         case cameraHeight = "camera_height"
+        case armHeadDistanceM = "arm_head_distance_m"
+        case armHeadState = "arm_head_state"
+        case armHeadQuality = "arm_head_quality"
+        case armHeadSource = "arm_head_source"
         case videoFrameBase64 = "video_frame_base64"
         case videoWidth = "video_width"
         case videoHeight = "video_height"

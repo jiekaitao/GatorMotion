@@ -34,9 +34,14 @@ class SkeletonFrame:
     all_joints_3d: Dict[str, Tuple[float, float, float]]
     keypoints_2d: Dict[str, Tuple[float, float]]
     point_depths_m: Dict[str, float]
+    camera_position: Optional[Tuple[float, float, float]]
     camera_intrinsics: Optional[Tuple[float, float, float, float]]
     camera_resolution: Optional[Tuple[int, int]]
     camera_points_3d: Dict[str, Tuple[float, float, float]]
+    arm_head_distance_m: Optional[float]
+    arm_head_state: Optional[str]
+    arm_head_quality: Optional[float]
+    arm_head_source: Optional[str]
     video_frame_bgr: Optional[np.ndarray]
     video_width: Optional[int]
     video_height: Optional[int]
@@ -173,6 +178,63 @@ def _parse_camera_intrinsics(
     return (fx, fy, cx, cy)
 
 
+def _parse_camera_position(
+    payload: Mapping[str, object],
+) -> Optional[Tuple[float, float, float]]:
+    raw_camera_position = payload.get("camera_position")
+    if raw_camera_position is None:
+        return None
+    if not isinstance(raw_camera_position, (list, tuple)) or len(raw_camera_position) != 3:
+        raise ValueError("'camera_position' must be a 3-element array [x, y, z]")
+
+    x_raw, y_raw, z_raw = raw_camera_position
+    if not all(isinstance(value, (int, float)) for value in (x_raw, y_raw, z_raw)):
+        raise ValueError("'camera_position' values must be numeric")
+    return (float(x_raw), float(y_raw), float(z_raw))
+
+
+def _parse_arm_head_distance_m(payload: Mapping[str, object]) -> Optional[float]:
+    raw_value = payload.get("arm_head_distance_m")
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, (int, float)):
+        raise ValueError("'arm_head_distance_m' must be numeric")
+    value = float(raw_value)
+    if value <= 0.0 or not np.isfinite(value):
+        return None
+    return value
+
+
+def _parse_arm_head_state(payload: Mapping[str, object]) -> Optional[str]:
+    raw_value = payload.get("arm_head_state")
+    if raw_value is None:
+        return None
+    state = str(raw_value).strip().lower()
+    if state in {"near", "mid", "far"}:
+        return state
+    return None
+
+
+def _parse_arm_head_quality(payload: Mapping[str, object]) -> Optional[float]:
+    raw_value = payload.get("arm_head_quality")
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, (int, float)):
+        raise ValueError("'arm_head_quality' must be numeric")
+    value = float(raw_value)
+    if not np.isfinite(value):
+        return None
+    return max(0.0, min(1.0, value))
+
+
+def _parse_arm_head_source(payload: Mapping[str, object]) -> Optional[str]:
+    raw_value = payload.get("arm_head_source")
+    if raw_value is None:
+        return None
+    source = str(raw_value).strip().lower()
+    return source or None
+
+
 def _parse_camera_resolution(
     payload: Mapping[str, object],
 ) -> Optional[Tuple[int, int]]:
@@ -289,6 +351,11 @@ def adapt_ios_payload(
     keypoints_2d = dict(default_keypoints_2d)
     keypoints_2d.update(payload_keypoints_2d)
     point_depths_m = _parse_point_depths_m(payload)
+    camera_position = _parse_camera_position(payload)
+    arm_head_distance_m = _parse_arm_head_distance_m(payload)
+    arm_head_state = _parse_arm_head_state(payload)
+    arm_head_quality = _parse_arm_head_quality(payload)
+    arm_head_source = _parse_arm_head_source(payload)
     camera_intrinsics = _parse_camera_intrinsics(payload)
     camera_resolution = _parse_camera_resolution(payload)
     camera_points_3d = _reconstruct_camera_points_3d(
@@ -311,9 +378,14 @@ def adapt_ios_payload(
         all_joints_3d=all_joints_3d,
         keypoints_2d=keypoints_2d,
         point_depths_m=point_depths_m,
+        camera_position=camera_position,
         camera_intrinsics=camera_intrinsics,
         camera_resolution=camera_resolution,
         camera_points_3d=camera_points_3d,
+        arm_head_distance_m=arm_head_distance_m,
+        arm_head_state=arm_head_state,
+        arm_head_quality=arm_head_quality,
+        arm_head_source=arm_head_source,
         video_frame_bgr=video_frame_bgr,
         video_width=video_width,
         video_height=video_height,
@@ -362,9 +434,14 @@ def adapt_mediapipe_pose_landmarks(
         all_joints_3d=dict(joints_3d),
         keypoints_2d=keypoints_2d,
         point_depths_m={},
+        camera_position=None,
         camera_intrinsics=None,
         camera_resolution=None,
         camera_points_3d={},
+        arm_head_distance_m=None,
+        arm_head_state=None,
+        arm_head_quality=None,
+        arm_head_source=None,
         video_frame_bgr=None,
         video_width=None,
         video_height=None,
@@ -390,6 +467,7 @@ def to_pipeline_payload(frame: SkeletonFrame) -> Dict[str, object]:
             for name, coords in frame.keypoints_2d.items()
         },
         "point_depths_m": dict(frame.point_depths_m),
+        "camera_position": list(frame.camera_position) if frame.camera_position else None,
         "camera_intrinsics": list(frame.camera_intrinsics) if frame.camera_intrinsics else None,
         "camera_width": frame.camera_resolution[0] if frame.camera_resolution else None,
         "camera_height": frame.camera_resolution[1] if frame.camera_resolution else None,
@@ -397,6 +475,10 @@ def to_pipeline_payload(frame: SkeletonFrame) -> Dict[str, object]:
             name: [coords[0], coords[1], coords[2]]
             for name, coords in frame.camera_points_3d.items()
         },
+        "arm_head_distance_m": frame.arm_head_distance_m,
+        "arm_head_state": frame.arm_head_state,
+        "arm_head_quality": frame.arm_head_quality,
+        "arm_head_source": frame.arm_head_source,
         "depth_mode": frame.depth_mode,
         "video_width": frame.video_width,
         "video_height": frame.video_height,

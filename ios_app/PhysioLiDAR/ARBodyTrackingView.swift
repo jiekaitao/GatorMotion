@@ -74,6 +74,13 @@ struct ARBodyTrackingView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, ARSessionDelegate {
+        private struct ArmHeadSignal {
+            let distanceM: Float
+            let state: String
+            let quality: Float
+            let source: String
+        }
+
         private weak var sceneView: ARSCNView?
         private let viewModel: ARTrackingViewModel
         private var sessionRunning = false
@@ -90,9 +97,21 @@ struct ARBodyTrackingView: UIViewRepresentable {
         private let includeAllJointsEveryNPackets = 15
         private let includeAllJoints = false
         private let includeVideoFrames = true
+        private var smoothedArmHeadDistanceM: Float?
+        private var stableArmHeadState: String = "unknown"
+        private var pendingArmHeadState: String?
+        private var pendingArmHeadStateSince: TimeInterval?
+        private let armHeadDistanceAlpha: Float = 0.35
+        private let armHeadMaxPerFrameJumpM: Float = 0.25
+        private let nearThresholdM: Float = 0.18
+        private let farThresholdM: Float = 0.35
+        private let stateHysteresisM: Float = 0.03
+        private let stateDwellSec: TimeInterval = 0.15
 
         private let jointMap: [String: String] = [
             "root": "root",
+            "head_joint": "head",
+            "neck_1_joint": "neck",
             "left_upLeg_joint": "left_hip",
             "left_leg_joint": "left_knee",
             "left_foot_joint": "left_ankle",
@@ -102,9 +121,11 @@ struct ARBodyTrackingView: UIViewRepresentable {
             "left_shoulder_1_joint": "left_shoulder",
             "left_arm_joint": "left_elbow",
             "left_forearm_joint": "left_wrist",
+            "left_hand_joint": "left_hand",
             "right_shoulder_1_joint": "right_shoulder",
             "right_arm_joint": "right_elbow",
-            "right_forearm_joint": "right_wrist"
+            "right_forearm_joint": "right_wrist",
+            "right_hand_joint": "right_hand"
         ]
 
         init(viewModel: ARTrackingViewModel) {
@@ -168,7 +189,17 @@ struct ARBodyTrackingView: UIViewRepresentable {
                 jointWorldPoints: jointWorldPoints,
                 frame: frame
             )
+            let cameraPosition = cameraWorldPosition(frame)
             let cameraParams = cameraParameters(frame)
+            let armHeadSignal = computeArmHeadSignal(
+                jointWorldPoints: jointWorldPoints,
+                keypoints2D: cameraMappedPoints?.keypoints2D,
+                pointDepthsM: cameraMappedPoints?.pointDepthsM,
+                cameraIntrinsics: cameraParams.intrinsics,
+                cameraWidth: cameraParams.width,
+                cameraHeight: cameraParams.height,
+                frameTimestamp: now
+            )
             let allJoints: [String: [Float]]?
             if includeAllJoints, let bodyAnchor {
                 packetCounter += 1
@@ -191,9 +222,14 @@ struct ARBodyTrackingView: UIViewRepresentable {
                 allJoints: allJoints,
                 keypoints2D: cameraMappedPoints?.keypoints2D,
                 pointDepthsM: cameraMappedPoints?.pointDepthsM,
+                cameraPosition: cameraPosition,
                 cameraIntrinsics: cameraParams.intrinsics,
                 cameraWidth: cameraParams.width,
                 cameraHeight: cameraParams.height,
+                armHeadDistanceM: armHeadSignal?.distanceM,
+                armHeadState: armHeadSignal?.state,
+                armHeadQuality: armHeadSignal?.quality,
+                armHeadSource: armHeadSignal?.source,
                 videoFrameBase64: encodedFrame?.0,
                 videoWidth: encodedFrame?.1,
                 videoHeight: encodedFrame?.2
@@ -404,6 +440,224 @@ struct ARBodyTrackingView: UIViewRepresentable {
             }
         }
 
+        private func computeArmHeadSignal(
+            jointWorldPoints: [String: SIMD3<Float>],
+            keypoints2D: [String: [Float]]?,
+            pointDepthsM: [String: Float]?,
+            cameraIntrinsics: [Float],
+            cameraWidth: Int,
+            cameraHeight: Int,
+            frameTimestamp: TimeInterval
+        ) -> ArmHeadSignal? {
+            let headJoints = ["head", "neck"]
+            let armJoints = ["left_hand", "left_wrist", "left_elbow", "right_hand", "right_wrist", "right_elbow"]
+
+            var rawDistanceM: Float?
+            var quality: Float = 0.0
+            var source = "none"
+
+            if let keypoints2D, let pointDepthsM {
+                let headPoints = cameraPointsForJoints(
+                    jointNames: headJoints,
+                    keypoints2D: keypoints2D,
+                    pointDepthsM: pointDepthsM,
+                    cameraIntrinsics: cameraIntrinsics,
+                    cameraWidth: cameraWidth,
+                    cameraHeight: cameraHeight
+                )
+                let armPoints = cameraPointsForJoints(
+                    jointNames: armJoints,
+                    keypoints2D: keypoints2D,
+                    pointDepthsM: pointDepthsM,
+                    cameraIntrinsics: cameraIntrinsics,
+                    cameraWidth: cameraWidth,
+                    cameraHeight: cameraHeight
+                )
+                if let lidarDistance = minPairwiseDistance(headPoints, armPoints) {
+                    rawDistanceM = lidarDistance
+                    let support = min(headPoints.count, armPoints.count)
+                    quality = min(1.0, Float(support) / 2.0)
+                    source = "lidar_camera"
+                }
+            }
+
+            if rawDistanceM == nil {
+                let headWorldPoints = worldPointsForJoints(headJoints, in: jointWorldPoints)
+                let armWorldPoints = worldPointsForJoints(armJoints, in: jointWorldPoints)
+                if let worldDistance = minPairwiseDistance(headWorldPoints, armWorldPoints) {
+                    rawDistanceM = worldDistance
+                    quality = max(quality, 0.45)
+                    source = "arkit_world_fallback"
+                }
+            }
+
+            guard let rawDistanceM else {
+                return nil
+            }
+            let stabilizedDistance = stabilizedArmHeadDistance(rawDistanceM)
+            let proposedState = classifyArmHeadState(for: stabilizedDistance)
+            let stableState = updateStableArmHeadState(
+                proposedState: proposedState,
+                frameTimestamp: frameTimestamp
+            )
+            return ArmHeadSignal(
+                distanceM: stabilizedDistance,
+                state: stableState,
+                quality: quality,
+                source: source
+            )
+        }
+
+        private func stabilizedArmHeadDistance(_ rawDistanceM: Float) -> Float {
+            guard let previous = smoothedArmHeadDistanceM else {
+                smoothedArmHeadDistanceM = rawDistanceM
+                return rawDistanceM
+            }
+            let clampedRaw = min(
+                max(rawDistanceM, previous - armHeadMaxPerFrameJumpM),
+                previous + armHeadMaxPerFrameJumpM
+            )
+            let filtered = (previous * (1.0 - armHeadDistanceAlpha)) + (clampedRaw * armHeadDistanceAlpha)
+            smoothedArmHeadDistanceM = filtered
+            return filtered
+        }
+
+        private func classifyArmHeadState(for distanceM: Float) -> String {
+            switch stableArmHeadState {
+            case "near":
+                if distanceM <= (nearThresholdM + stateHysteresisM) {
+                    return "near"
+                }
+                return distanceM >= farThresholdM ? "far" : "mid"
+            case "far":
+                if distanceM >= (farThresholdM - stateHysteresisM) {
+                    return "far"
+                }
+                return distanceM <= nearThresholdM ? "near" : "mid"
+            default:
+                if distanceM < (nearThresholdM - stateHysteresisM) {
+                    return "near"
+                }
+                if distanceM > (farThresholdM + stateHysteresisM) {
+                    return "far"
+                }
+                return "mid"
+            }
+        }
+
+        private func updateStableArmHeadState(
+            proposedState: String,
+            frameTimestamp: TimeInterval
+        ) -> String {
+            if stableArmHeadState == "unknown" {
+                stableArmHeadState = proposedState
+                pendingArmHeadState = nil
+                pendingArmHeadStateSince = nil
+                return stableArmHeadState
+            }
+            if proposedState == stableArmHeadState {
+                pendingArmHeadState = nil
+                pendingArmHeadStateSince = nil
+                return stableArmHeadState
+            }
+
+            if pendingArmHeadState != proposedState {
+                pendingArmHeadState = proposedState
+                pendingArmHeadStateSince = frameTimestamp
+                return stableArmHeadState
+            }
+
+            let pendingSince = pendingArmHeadStateSince ?? frameTimestamp
+            if (frameTimestamp - pendingSince) >= stateDwellSec {
+                stableArmHeadState = proposedState
+                pendingArmHeadState = nil
+                pendingArmHeadStateSince = nil
+            }
+            return stableArmHeadState
+        }
+
+        private func cameraPointsForJoints(
+            jointNames: [String],
+            keypoints2D: [String: [Float]],
+            pointDepthsM: [String: Float],
+            cameraIntrinsics: [Float],
+            cameraWidth: Int,
+            cameraHeight: Int
+        ) -> [SIMD3<Float>] {
+            var points: [SIMD3<Float>] = []
+            points.reserveCapacity(jointNames.count)
+
+            for jointName in jointNames {
+                guard let xy = keypoints2D[jointName], xy.count == 2 else { continue }
+                guard let depthM = pointDepthsM[jointName], depthM > 0.0 else { continue }
+                guard let point = cameraPointFromDepth(
+                    normalizedX: xy[0],
+                    normalizedY: xy[1],
+                    depthM: depthM,
+                    cameraIntrinsics: cameraIntrinsics,
+                    cameraWidth: cameraWidth,
+                    cameraHeight: cameraHeight
+                ) else {
+                    continue
+                }
+                points.append(point)
+            }
+            return points
+        }
+
+        private func cameraPointFromDepth(
+            normalizedX: Float,
+            normalizedY: Float,
+            depthM: Float,
+            cameraIntrinsics: [Float],
+            cameraWidth: Int,
+            cameraHeight: Int
+        ) -> SIMD3<Float>? {
+            guard cameraIntrinsics.count == 4 else { return nil }
+            let fx = cameraIntrinsics[0]
+            let fy = cameraIntrinsics[1]
+            let cx = cameraIntrinsics[2]
+            let cy = cameraIntrinsics[3]
+            guard fx > 1e-6, fy > 1e-6 else { return nil }
+            guard cameraWidth > 1, cameraHeight > 1 else { return nil }
+
+            let clampedX = min(max(normalizedX, 0.0), 1.0)
+            let clampedY = min(max(normalizedY, 0.0), 1.0)
+            let u = clampedX * Float(cameraWidth - 1)
+            let v = clampedY * Float(cameraHeight - 1)
+            let x = ((u - cx) * depthM) / fx
+            let y = ((v - cy) * depthM) / fy
+            return SIMD3<Float>(x, y, depthM)
+        }
+
+        private func worldPointsForJoints(
+            _ jointNames: [String],
+            in jointWorldPoints: [String: SIMD3<Float>]
+        ) -> [SIMD3<Float>] {
+            jointNames.compactMap { jointWorldPoints[$0] }
+        }
+
+        private func minPairwiseDistance(
+            _ lhs: [SIMD3<Float>],
+            _ rhs: [SIMD3<Float>]
+        ) -> Float? {
+            guard !lhs.isEmpty, !rhs.isEmpty else { return nil }
+            var best = Float.greatestFiniteMagnitude
+            for left in lhs {
+                for right in rhs {
+                    let dx = left.x - right.x
+                    let dy = left.y - right.y
+                    let dz = left.z - right.z
+                    let d = sqrt((dx * dx) + (dy * dy) + (dz * dz))
+                    if d < best {
+                        best = d
+                    }
+                }
+            }
+            guard best.isFinite else { return nil }
+            return best
+        }
+
         private func cameraParameters(_ frame: ARFrame) -> (intrinsics: [Float], width: Int, height: Int) {
             let intrinsics = frame.camera.intrinsics
             let capturedImage = frame.capturedImage
@@ -417,6 +671,15 @@ struct ARBodyTrackingView: UIViewRepresentable {
                 width: CVPixelBufferGetWidth(capturedImage),
                 height: CVPixelBufferGetHeight(capturedImage)
             )
+        }
+
+        private func cameraWorldPosition(_ frame: ARFrame) -> [Float] {
+            let transform = frame.camera.transform
+            return [
+                transform.columns.3.x,
+                transform.columns.3.y,
+                transform.columns.3.z,
+            ]
         }
 
         private func currentInterfaceOrientation() -> UIInterfaceOrientation {

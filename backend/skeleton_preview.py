@@ -44,6 +44,7 @@ DEPTH_JOINT_ORDER: Tuple[str, ...] = (
 )
 
 DISTANCE_METRIC_ORDER: Tuple[Tuple[str, str], ...] = (
+    ("arm_head_distance_m", "Arm-head dist"),
     ("left_upper_arm_length_m", "L upper arm"),
     ("right_upper_arm_length_m", "R upper arm"),
     ("left_forearm_length_m", "L forearm"),
@@ -266,14 +267,20 @@ class IOSSkeletonPreview:
     def _build_motion_lines(self, metrics: Mapping[str, float]) -> List[str]:
         lines: List[str] = []
         for side, label in (("left", "L"), ("right", "R")):
-            rel_depth = metrics.get(f"{side}_arm_rel_depth_m")
-            velocity = metrics.get(f"{side}_arm_depth_velocity_mps")
+            distance_m = metrics.get(f"{side}_arm_distance_m")
+            if distance_m is None:
+                distance_m = metrics.get(f"{side}_arm_rel_depth_m")
+            velocity = metrics.get(f"{side}_arm_distance_velocity_mps")
+            if velocity is None:
+                velocity = metrics.get(f"{side}_arm_depth_velocity_mps")
             cycles = int(metrics.get(f"{side}_arm_back_forth_count", 0.0))
-            direction = metrics.get(f"{side}_arm_depth_direction", 0.0)
-            if rel_depth is None and velocity is None and cycles == 0:
+            direction = metrics.get(f"{side}_arm_distance_direction")
+            if direction is None:
+                direction = metrics.get(f"{side}_arm_depth_direction", 0.0)
+            if distance_m is None and velocity is None and cycles == 0:
                 continue
 
-            rel_text = f"rel={float(rel_depth):+.3f}m" if rel_depth is not None else "rel=--"
+            rel_text = f"dist={float(distance_m):.3f}m" if distance_m is not None else "dist=--"
             vel_text = f"vel={float(velocity):+.3f}m/s" if velocity is not None else "vel=--"
             direction_text = self._direction_label(float(direction))
             lines.append(
