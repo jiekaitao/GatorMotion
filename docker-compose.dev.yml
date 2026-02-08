@@ -17,6 +17,8 @@ services:
       - ./cv_backend/rep_counter.py:/app/rep_counter.py
       - ./cv_backend/coach_engine.py:/app/coach_engine.py
       - ./cv_backend/train_reference.py:/app/train_reference.py
+      - ./cv_backend/ml_pain_detector.py:/app/ml_pain_detector.py
       - ./cv_backend/pt_coach:/app/pt_coach
       - ./cv_backend/coach_models:/app/coach_models
+      - ./cv_backend/pain_models:/app/pain_models
       - ./web/public/skeleton_data:/app/skeleton_data
