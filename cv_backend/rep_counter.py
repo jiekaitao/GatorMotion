@@ -248,13 +248,20 @@ class PainDetector:
     def __init__(self):
         self.pain_level = "normal"
         self.message = ""
-        self.EAR_WARNING = 0.20
-        self.EAR_STOP = 0.15
-        self.MAR_WARNING = 0.50
-        self.MAR_STOP = 0.75
+        # Slightly more sensitive thresholds for exercise strain.
+        self.EAR_WARNING = 0.21
+        self.EAR_STOP = 0.17
+        self.MAR_WARNING = 0.45
+        self.MAR_STOP = 0.62
+        self.warning_frames = 0
+        self.stop_frames = 0
+        self.MIN_WARNING_FRAMES = 4
+        self.MIN_STOP_FRAMES = 3
 
     def update(self, face_landmarks, w, h):
         if not face_landmarks:
+            self.warning_frames = 0
+            self.stop_frames = 0
             return "normal", "", 0, 0
 
         def dist(i1, i2):
@@ -268,12 +275,23 @@ class PainDetector:
 
         mar = dist(13, 14) / (dist(78, 308) + 1e-6)
 
-        if ear < self.EAR_STOP and mar > self.MAR_STOP:
+        # Blend a strict "both indicators" signal with strong single-indicator fallbacks.
+        stop_signal = (ear < self.EAR_STOP and mar > self.MAR_STOP) or ear < 0.13 or mar > 0.85
+        warning_signal = (ear < self.EAR_WARNING and mar > self.MAR_WARNING) or ear < 0.18 or mar > 0.65
+
+        if stop_signal:
+            self.stop_frames += 1
+            self.warning_frames += 1
+        else:
+            self.stop_frames = 0
+            self.warning_frames = self.warning_frames + 1 if warning_signal else 0
+
+        if self.stop_frames >= self.MIN_STOP_FRAMES:
             self.pain_level = "stop"
-            self.message = "STOP! HIGH PAIN DETECTED"
-        elif ear < self.EAR_WARNING and mar > self.MAR_WARNING:
+            self.message = "Stop now. High facial pain signs detected."
+        elif self.warning_frames >= self.MIN_WARNING_FRAMES:
             self.pain_level = "warning"
-            self.message = "Warning: Facial Strain Detected"
+            self.message = "Pain signs detected. Please take a break."
         else:
             self.pain_level = "normal"
             self.message = ""

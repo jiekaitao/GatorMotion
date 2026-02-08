@@ -67,6 +67,9 @@ export default function PainStopOverlay({ repCount, exerciseName, onResume }: Pa
         <p style={{ fontSize: "16px", color: "var(--color-gray-400)", lineHeight: 1.6, maxWidth: 320, margin: "0 auto" }}>
           {adviceText}
         </p>
+        <p style={{ fontSize: "13px", color: "var(--color-red)", fontWeight: 700, lineHeight: 1.5, marginTop: "var(--space-md)" }}>
+          If pain continues, stop and contact your therapist.
+        </p>
         <button
           className="btn btn-secondary"
           style={{ marginTop: "var(--space-lg)", minWidth: 200, borderRadius: "var(--radius-xl)" }}

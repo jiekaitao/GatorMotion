@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const CAPTURE_W = 320;
-const CAPTURE_H = 240;
+const CAPTURE_W = 480;
+const CAPTURE_H = 360;
 
 interface ExerciseStatus {
   rep_count: number;
@@ -16,6 +16,7 @@ interface ExerciseStatus {
 interface PainStatus {
   level: string;
   message: string;
+  face_detected?: boolean;
   ear?: number;
   mar?: number;
 }
@@ -40,6 +41,7 @@ interface UseExerciseWebSocketResult {
   formQuality: string;
   painLevel: string;
   painMessage: string;
+  faceDetected: boolean;
   ear: number;
   mar: number;
   angle: number;
@@ -62,6 +64,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [formQuality, setFormQuality] = useState("neutral");
   const [painLevel, setPainLevel] = useState("normal");
   const [painMessage, setPainMessage] = useState("");
+  const [faceDetected, setFaceDetected] = useState(false);
   const [ear, setEar] = useState(0);
   const [mar, setMar] = useState(0);
   const [angle, setAngle] = useState(0);
@@ -69,6 +72,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [sixSevenTriggered, setSixSevenTriggered] = useState(false);
 
   const lastUiUpdateRef = useRef(0);
+  const lastFaceSeenAtRef = useRef(0);
   const landmarksRef = useRef<LandmarkFrame>({
     prev: null,
     current: null,
@@ -173,8 +177,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
           }
 
           // Throttle React state updates to ~4/sec
-          const now = performance.now();
-          if (now - lastUiUpdateRef.current > 250) {
+          const uiNow = performance.now();
+          if (uiNow - lastUiUpdateRef.current > 250) {
             if (exercise) {
               setRepCount(exercise.rep_count);
               setFormQuality(exercise.form_quality);
@@ -184,16 +188,26 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
             if (pain) {
               setPainLevel(pain.level);
               setPainMessage(pain.message);
-              if (pain.ear !== undefined) setEar(pain.ear);
-              if (pain.mar !== undefined) setMar(pain.mar);
+              const hasFace = pain.face_detected === true;
+              if (hasFace) {
+                lastFaceSeenAtRef.current = uiNow;
+              }
+              // Keep "face detected" stable briefly to avoid flicker on single dropped frames.
+              const recentlyDetected = uiNow - lastFaceSeenAtRef.current < 1500;
+              setFaceDetected(hasFace || recentlyDetected);
+              setEar(pain.ear ?? 0);
+              setMar(pain.mar ?? 0);
             }
-            lastUiUpdateRef.current = now;
+            lastUiUpdateRef.current = uiNow;
           }
         };
 
         ws.onclose = () => {
           clearTimeout(timeout);
           setConnected(false);
+          setFaceDetected(false);
+          setEar(0);
+          setMar(0);
           wsRef.current = null;
           // Reconnect after unexpected close (not during cleanup)
           if (!stopped) {
@@ -221,6 +235,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
         wsRef.current = null;
       }
       setConnected(false);
+      setFaceDetected(false);
     };
   }, [exerciseKey]);
 
@@ -252,6 +267,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     formQuality,
     painLevel,
     painMessage,
+    faceDetected,
     ear,
     mar,
     angle,

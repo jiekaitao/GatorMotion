@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import Image from "next/image";
-import { Flame, Award, TrendingUp, Bell, Check, X } from "lucide-react";
+import { Flame, Award, TrendingUp, Bell, Check, X, Settings, LogOut } from "lucide-react";
 
 interface StreakInfo {
   currentStreak: number;
@@ -40,7 +40,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [userMenuAnchor, setUserMenuAnchor] = useState<"mobile" | "desktop" | null>(null);
   const bellRef = useRef<HTMLDivElement>(null);
+  const mobileUserMenuRef = useRef<HTMLDivElement>(null);
+  const desktopUserMenuRef = useRef<HTMLDivElement>(null);
 
   // Always track the latest children
   pendingChildrenRef.current = children;
@@ -93,19 +96,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [userRole]);
 
-  // Click-outside handler to close notification popover
+  // Click-outside + escape handlers for popovers
   useEffect(() => {
-    if (!showNotifications) return;
+    const showUserMenu = userMenuAnchor !== null;
+    if (!showNotifications && !showUserMenu) return;
+
     function handleClickOutside(e: MouseEvent) {
-      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (showNotifications && bellRef.current && !bellRef.current.contains(target)) {
         setShowNotifications(false);
       }
+
+      if (showUserMenu) {
+        const activeMenuRef = userMenuAnchor === "mobile" ? mobileUserMenuRef : desktopUserMenuRef;
+        if (activeMenuRef.current && !activeMenuRef.current.contains(target)) {
+          setUserMenuAnchor(null);
+        }
+      }
     }
+
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (showNotifications) {
+        setShowNotifications(false);
+      }
+      if (showUserMenu) {
+        setUserMenuAnchor(null);
+      }
+    }
+
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showNotifications]);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [showNotifications, userMenuAnchor]);
 
   async function handleBellClick() {
+    setUserMenuAnchor(null);
     if (showNotifications) {
       setShowNotifications(false);
       return;
@@ -122,6 +151,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       setNotifications([]);
     }
     setShowNotifications(true);
+  }
+
+  function handleAvatarClick(anchor: "mobile" | "desktop") {
+    setShowNotifications(false);
+    setUserMenuAnchor((prev) => (prev === anchor ? null : anchor));
+  }
+
+  function handleOpenSettings() {
+    setUserMenuAnchor(null);
+    router.push("/settings");
+  }
+
+  async function handleSignOut() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Best effort: still route to login.
+    } finally {
+      setUserMenuAnchor(null);
+      router.replace("/login");
+    }
   }
 
   async function handleRespond(inviteId: string, action: "accept" | "decline") {
@@ -335,21 +385,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
             {avatarInitial && (
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: "var(--radius-full)",
-                  backgroundColor: "var(--color-gray-100)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 700,
-                  fontSize: "var(--text-small)",
-                  color: "var(--color-gray-500)",
-                }}
-              >
-                {avatarInitial}
+              <div className="user-menu-anchor" ref={mobileUserMenuRef}>
+                <button
+                  type="button"
+                  className="avatar-button avatar-button-mobile"
+                  onClick={() => handleAvatarClick("mobile")}
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuAnchor === "mobile"}
+                  aria-label="Open user menu"
+                >
+                  {avatarInitial}
+                </button>
+                {userMenuAnchor === "mobile" && (
+                  <div className="user-menu-popover" role="menu" aria-label="User menu">
+                    <button type="button" className="user-menu-item" role="menuitem" onClick={handleOpenSettings}>
+                      <Settings size={16} />
+                      Settings
+                    </button>
+                    <button type="button" className="user-menu-item user-menu-item-danger" role="menuitem" onClick={handleSignOut}>
+                      <LogOut size={16} />
+                      Sign out
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -395,23 +453,29 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
             {avatarInitial && (
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: "var(--radius-xl)",
-                  backgroundColor: "var(--color-gray-100)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 700,
-                  fontSize: "var(--text-body)",
-                  color: "var(--color-gray-500)",
-                  cursor: "pointer",
-                  border: "2px solid transparent",
-                }}
-              >
-                {avatarInitial}
+              <div className="user-menu-anchor" ref={desktopUserMenuRef}>
+                <button
+                  type="button"
+                  className="avatar-button avatar-button-desktop"
+                  onClick={() => handleAvatarClick("desktop")}
+                  aria-haspopup="menu"
+                  aria-expanded={userMenuAnchor === "desktop"}
+                  aria-label="Open user menu"
+                >
+                  {avatarInitial}
+                </button>
+                {userMenuAnchor === "desktop" && (
+                  <div className="user-menu-popover" role="menu" aria-label="User menu">
+                    <button type="button" className="user-menu-item" role="menuitem" onClick={handleOpenSettings}>
+                      <Settings size={16} />
+                      Settings
+                    </button>
+                    <button type="button" className="user-menu-item user-menu-item-danger" role="menuitem" onClick={handleSignOut}>
+                      <LogOut size={16} />
+                      Sign out
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </header>

@@ -282,7 +282,13 @@ async def ws_exercise(websocket: WebSocket):
                 exercise_status = rep_counter.update(lm_objects, w, h)
 
             # Pain detection from face landmarks
-            pain_status = {"level": "normal", "message": ""}
+            pain_status = {
+                "level": "normal",
+                "message": "",
+                "face_detected": False,
+                "ear": 0.0,
+                "mar": 0.0,
+            }
             if (
                 "face" in detectors
                 and tracking["face"]
@@ -298,7 +304,13 @@ async def ws_exercise(websocket: WebSocket):
 
                 flm_objects = [FLM(d) for d in face_lms]
                 result = pain_detector.update(flm_objects, w, h)
-                pain_status = {"level": result[0], "message": result[1], "ear": round(result[2], 4), "mar": round(result[3], 4)}
+                pain_status = {
+                    "level": result[0],
+                    "message": result[1],
+                    "face_detected": True,
+                    "ear": round(result[2], 4),
+                    "mar": round(result[3], 4),
+                }
 
             # 6-7 Easter egg detection from pose wrist landmarks
             six_seven_status = {"triggered": False}

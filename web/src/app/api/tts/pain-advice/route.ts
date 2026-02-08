@@ -7,7 +7,7 @@ const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY!;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah
 
-const FALLBACK_MESSAGE = "Take a moment to rest. You're doing great!";
+const FALLBACK_MESSAGE = "Take a break now. If pain continues, stop the exercise and contact your therapist.";
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   let adviceText = FALLBACK_MESSAGE;
   if (GEMINI_API_KEY) {
     try {
-      const prompt = `Generate a short (1-2 sentences, under 30 words) encouraging break message for someone doing physical therapy exercises. They were doing "${exerciseName || "an exercise"}"${repCount && repCount > 3 ? ` and completed ${repCount} reps so far` : ""}. Be warm, supportive, and motivating. Don't use quotes around the message. Just return the message text, nothing else.`;
+      const prompt = `Generate a short (1-2 sentences, under 35 words) safety-first break message for someone doing physical therapy exercises. They were doing "${exerciseName || "an exercise"}"${repCount && repCount > 3 ? ` and completed ${repCount} reps so far` : ""}. Include this guidance naturally: if pain continues, stop and contact their therapist. Don't use quotes around the message. Just return the message text, nothing else.`;
 
       const geminiRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,

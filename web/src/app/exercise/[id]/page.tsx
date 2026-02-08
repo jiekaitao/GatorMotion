@@ -8,6 +8,7 @@ import SkeletonViewer from "@/components/SkeletonViewer";
 import { useExerciseWebSocket } from "@/hooks/useExerciseWebSocket";
 import DebugPanel from "@/components/DebugPanel";
 import PainStopOverlay from "@/components/PainStopOverlay";
+import SetBreakOverlay from "@/components/SetBreakOverlay";
 import ExerciseReport from "@/components/ExerciseReport";
 import { useTtsIntro } from "@/hooks/useTtsIntro";
 import confetti from "canvas-confetti";
@@ -19,7 +20,6 @@ import {
   SkipForward,
   CheckCircle2,
   AlertTriangle,
-  XOctagon,
   Play,
   Eye,
   Zap,
@@ -56,6 +56,9 @@ const DEFAULT_INSTRUCTIONS = [
   "Focus on proper form over speed — quality of movement is more important than quantity.",
 ];
 
+const SET_BREAK_SECONDS = 15;
+const SUSTAINED_PAIN_WARNING_MS = 2500;
+
 export default function ExercisePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: assignmentId } = use(params);
   const searchParams = useSearchParams();
@@ -65,7 +68,6 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const name = searchParams.get("name") || "Exercise";
   const sets = parseInt(searchParams.get("sets") || "3");
   const reps = parseInt(searchParams.get("reps") || "10");
-  const holdSec = parseInt(searchParams.get("holdSec") || "0");
   const exerciseKey = searchParams.get("exerciseKey") || null;
   const skeletonDataFile = searchParams.get("skeletonDataFile") || null;
 
@@ -74,6 +76,9 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const [allDone, setAllDone] = useState(false);
   const [currentSet, setCurrentSet] = useState(1);
   const [currentRep, setCurrentRep] = useState(0);
+  const [repOffset, setRepOffset] = useState(0);
+  const [setBreakActive, setSetBreakActive] = useState(false);
+  const [setBreakRemaining, setSetBreakRemaining] = useState(SET_BREAK_SECONDS);
 
   // Countdown state
   const [countdownNum, setCountdownNum] = useState(3);
@@ -92,6 +97,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   // Pain stop state
   const [paused, setPaused] = useState(false);
   const painStopCooldownRef = useRef(false);
+  const painWarningSinceRef = useRef<number | null>(null);
 
   // Session metrics
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -110,6 +116,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     formQuality,
     painLevel,
     painMessage,
+    faceDetected,
     ear,
     mar,
     angle,
@@ -125,18 +132,73 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     setHeroExpanded((prev) => !prev);
   }, []);
 
-  useEffect(() => {
-    if (exerciseKey && wsRepCount > currentRep) {
-      setCurrentRep(wsRepCount);
-    }
-  }, [wsRepCount, exerciseKey, currentRep]);
+  const startSetBreak = useCallback(() => {
+    setSetBreakActive(true);
+    setSetBreakRemaining(SET_BREAK_SECONDS);
+  }, []);
 
-  // Pain stop trigger
+  const finishSetBreak = useCallback(() => {
+    setSetBreakActive(false);
+    setCurrentSet((prevSet) => Math.min(prevSet + 1, sets));
+    setCurrentRep(0);
+    setRepOffset(wsRepCount);
+  }, [sets, wsRepCount]);
+
+  const skipSetBreak = useCallback(() => {
+    finishSetBreak();
+  }, [finishSetBreak]);
+
   useEffect(() => {
-    if (painLevel === "stop" && phase === "active" && !paused && !painStopCooldownRef.current) {
-      setPaused(true);
+    if (!setBreakActive || phase !== "active") return;
+    if (setBreakRemaining <= 0) {
+      finishSetBreak();
+      return;
     }
-  }, [painLevel, phase, paused]);
+    const timer = setTimeout(() => {
+      setSetBreakRemaining((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [setBreakActive, setBreakRemaining, finishSetBreak, phase]);
+
+  useEffect(() => {
+    if (!exerciseKey || phase !== "active" || paused || setBreakActive) return;
+
+    // Handle counter resets after reconnect.
+    if (wsRepCount < repOffset) {
+      setRepOffset(wsRepCount);
+      setCurrentRep(wsRepCount);
+      return;
+    }
+
+    const setRepCount = Math.max(0, wsRepCount - repOffset);
+    if (setRepCount > currentRep) {
+      setCurrentRep(setRepCount);
+    }
+  }, [wsRepCount, exerciseKey, currentRep, repOffset, phase, paused, setBreakActive]);
+
+  // Pain stop trigger (immediate on "stop", or sustained "warning")
+  useEffect(() => {
+    if (phase !== "active" || paused || setBreakActive || painStopCooldownRef.current) return;
+
+    if (painLevel === "stop") {
+      painWarningSinceRef.current = null;
+      setPaused(true);
+      return;
+    }
+
+    if (painLevel === "warning") {
+      const now = Date.now();
+      if (painWarningSinceRef.current === null) {
+        painWarningSinceRef.current = now;
+      } else if (now - painWarningSinceRef.current >= SUSTAINED_PAIN_WARNING_MS) {
+        painWarningSinceRef.current = null;
+        setPaused(true);
+      }
+      return;
+    }
+
+    painWarningSinceRef.current = null;
+  }, [painLevel, phase, paused, setBreakActive]);
 
   // 6-7 Easter egg: play a random cached voice clip
   const sixSevenPlayingRef = useRef(false);
@@ -169,6 +231,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
 
   const handlePainResume = useCallback(() => {
     setPaused(false);
+    painWarningSinceRef.current = null;
     painStopCooldownRef.current = true;
     setTimeout(() => {
       painStopCooldownRef.current = false;
@@ -210,16 +273,15 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   }, [phase, formQuality]);
 
   useEffect(() => {
-    if (phase === "active" && currentRep >= reps && !completing) {
+    if (phase === "active" && currentRep >= reps && !completing && !setBreakActive) {
       if (currentSet < sets) {
-        setCurrentSet((s) => s + 1);
-        setCurrentRep(0);
+        startSetBreak();
       } else {
         handleComplete();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRep, reps, phase, completing, currentSet, sets]);
+  }, [currentRep, reps, phase, completing, currentSet, sets, setBreakActive, startSetBreak]);
 
   // Countdown timer
   useEffect(() => {
@@ -323,7 +385,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   }
 
   function simulateRep() {
-    if (currentRep < reps) {
+    if (!setBreakActive && !paused && currentRep < reps) {
       setCurrentRep((prev) => prev + 1);
     }
   }
@@ -331,6 +393,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const totalReps = sets * reps;
   const completedReps = (currentSet - 1) * reps + currentRep;
   const progressPct = totalReps > 0 ? (completedReps / totalReps) * 100 : 0;
+  const painDetected = painLevel === "warning" || painLevel === "stop";
 
   const formBadge = exerciseKey
     ? formQuality === "good"
@@ -360,8 +423,19 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         overflowY: "auto",
       }}>
         <div style={{ maxWidth: 700, width: "100%", textAlign: "center" }}>
-          <div className="animate-success">
-            <CheckCircle2 size={80} strokeWidth={2} color="var(--color-green)" />
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <div
+              className="animate-success"
+              style={{
+                width: 96,
+                height: 96,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <CheckCircle2 size={80} strokeWidth={2} color="var(--color-green)" />
+            </div>
           </div>
           <h1 style={{ marginTop: "var(--space-lg)", fontSize: "var(--text-display)", fontWeight: 800, color: allDone ? "var(--color-green)" : "var(--color-primary)" }}>
             {allDone ? "All Exercises Complete!" : "Exercise Complete!"}
@@ -632,6 +706,15 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         />
       )}
 
+      {setBreakActive && (
+        <SetBreakOverlay
+          secondsRemaining={setBreakRemaining}
+          currentSet={currentSet}
+          totalSets={sets}
+          onSkip={skipSetBreak}
+        />
+      )}
+
       <header className="session-header">
         <button
           onClick={() => { stopCapture(); router.push("/home"); }}
@@ -705,18 +788,52 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
             )}
 
             {exerciseKey && (
-              <div style={{
-                position: "absolute",
-                bottom: "var(--space-sm)",
-                right: "var(--space-sm)",
-                padding: "4px 8px",
-                borderRadius: "var(--radius-sm)",
-                backgroundColor: wsConnected ? "rgba(88,204,2,0.8)" : "rgba(234,43,43,0.8)",
-                color: "white",
-                fontSize: "11px",
-                fontWeight: 700,
-              }}>
-                {wsConnected ? "CV Connected" : "CV Offline"}
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: "var(--space-sm)",
+                  right: "var(--space-sm)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  zIndex: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
+                  <div
+                    style={{
+                      padding: "3px 7px",
+                      borderRadius: "var(--radius-sm)",
+                      backgroundColor: painDetected ? "rgba(234,43,43,0.88)" : "rgba(60,60,60,0.22)",
+                      color: painDetected ? "white" : "rgba(255,255,255,0.65)",
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {painDetected ? "Pain ✓" : "Pain X"}
+                  </div>
+                  <div style={{
+                    padding: "4px 8px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: wsConnected ? "rgba(88,204,2,0.85)" : "rgba(234,43,43,0.85)",
+                    color: "white",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                  }}>
+                    {wsConnected ? "CV Connected" : "CV Offline"}
+                  </div>
+                </div>
+                <div style={{
+                  padding: "4px 8px",
+                  borderRadius: "var(--radius-sm)",
+                  backgroundColor: faceDetected ? "rgba(88,204,2,0.85)" : "rgba(255,150,0,0.92)",
+                  color: "white",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                }}>
+                  {faceDetected ? "Face Detected" : "Face Not Detected"}
+                </div>
               </div>
             )}
           </div>
