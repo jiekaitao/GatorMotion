@@ -3,7 +3,7 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { User, Check, LogOut } from "lucide-react";
+import { User, Check, LogOut, Trash2 } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -15,6 +15,11 @@ export default function SettingsPage() {
   const [role, setRole] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Delete account
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -52,6 +57,19 @@ export default function SettingsPage() {
       setProfileMsg({ type: "error", text: "Something went wrong" });
     } finally {
       setProfileSaving(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (deleteConfirmText !== username) return;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/auth/delete-account", { method: "DELETE" });
+      if (res.ok) {
+        router.replace("/login");
+      }
+    } catch {
+      setDeleting(false);
     }
   }
 
@@ -131,11 +149,64 @@ export default function SettingsPage() {
           </form>
         </div>
 
+        {/* ── Delete Account ── */}
+        <div className="card animate-in" style={{ animationDelay: "60ms", marginBottom: "var(--space-lg)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-md)" }}>
+            <Trash2 size={20} color="var(--color-red)" />
+            <h3 style={{ fontWeight: 700 }}>Delete Account</h3>
+          </div>
+
+          {!showDeleteConfirm ? (
+            <>
+              <p style={{ fontSize: "var(--text-small)", color: "var(--color-gray-400)", marginBottom: "var(--space-md)" }}>
+                Permanently delete your account and all associated data (assignments, streaks, messages).
+              </p>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="btn btn-danger btn-full"
+              >
+                Delete Account
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: "var(--text-small)", color: "var(--color-red)", fontWeight: 600, marginBottom: "var(--space-md)" }}>
+                Type your username <strong>{username}</strong> to confirm:
+              </p>
+              <input
+                type="text"
+                className="input"
+                placeholder={username}
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                style={{ marginBottom: "var(--space-md)" }}
+              />
+              <div style={{ display: "flex", gap: "var(--space-sm)" }}>
+                <button
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); }}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  className="btn btn-danger"
+                  style={{ flex: 1 }}
+                  disabled={deleteConfirmText !== username || deleting}
+                >
+                  {deleting ? "Deleting..." : "Confirm Delete"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* ── Logout ── */}
         <button
           onClick={handleLogout}
           className="btn btn-danger btn-full animate-in"
-          style={{ animationDelay: "60ms" }}
+          style={{ animationDelay: "120ms" }}
         >
           <LogOut size={18} />
           Log Out
