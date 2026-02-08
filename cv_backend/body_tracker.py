@@ -125,11 +125,16 @@ class ExerciseConfig:
     start_angle: float
     peak_angle: float
     threshold: float = 15.0
+    rest_threshold: float = 35.0
 
 class RepCounter:
     EXERCISES = {
-        "shoulder_raise": ExerciseConfig("Shoulder Raise", (24, 12, 14), 0, 150),
-        "elbow_flexion": ExerciseConfig("Elbow Flexion", (12, 14, 16), 170, 45),
+        "shoulder_raise": ExerciseConfig("Shoulder Raise", (24, 12, 14), 0, 140, threshold=20),
+        "arm_abduction": ExerciseConfig("Arm Abduction", (24, 12, 14), 0, 140, threshold=20),
+        "arm_vw": ExerciseConfig("Arm VW", (24, 12, 14), 30, 165, threshold=25, rest_threshold=40),
+        "squat": ExerciseConfig("Squat", (12, 24, 26), 175, 145, threshold=15, rest_threshold=18),
+        "leg_abduction": ExerciseConfig("Leg Abduction", (11, 23, 25), 172, 140, threshold=15, rest_threshold=15),
+        "elbow_flexion": ExerciseConfig("Elbow Flexion", (12, 14, 16), 175, 80, threshold=40, rest_threshold=20),
     }
     
     def __init__(self, exercise_key: str = "shoulder_raise"):
@@ -153,7 +158,7 @@ class RepCounter:
         
         up = self.config.peak_angle > self.config.start_angle
         at_peak = self.smoothed_angle > (self.config.peak_angle - self.config.threshold) if up else self.smoothed_angle < (self.config.peak_angle + self.config.threshold)
-        at_rest = self.smoothed_angle < (self.config.start_angle + self.config.threshold) if up else self.smoothed_angle > (self.config.start_angle - self.config.threshold)
+        at_rest = self.smoothed_angle < (self.config.start_angle + self.config.rest_threshold) if up else self.smoothed_angle > (self.config.start_angle - self.config.rest_threshold)
         
         if self.state == "rest" and not at_rest: self.state = "moving"
         elif self.state == "moving" and at_peak: self.state = "peak"
