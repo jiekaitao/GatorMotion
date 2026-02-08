@@ -19,6 +19,8 @@ interface PainStatus {
   face_detected?: boolean;
   ear?: number;
   mar?: number;
+  pspi_score?: number | null;
+  calibrated?: boolean;
 }
 
 export interface PoseLandmark {
@@ -64,6 +66,8 @@ interface UseExerciseWebSocketResult {
   faceDetected: boolean;
   ear: number;
   mar: number;
+  pspiScore: number | null;
+  painCalibrated: boolean;
   angle: number;
   repState: string;
   sixSevenTriggered: boolean;
@@ -90,6 +94,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [faceDetected, setFaceDetected] = useState(false);
   const [ear, setEar] = useState(0);
   const [mar, setMar] = useState(0);
+  const [pspiScore, setPspiScore] = useState<number | null>(null);
+  const [painCalibrated, setPainCalibrated] = useState(false);
   const [angle, setAngle] = useState(0);
   const [repState, setRepState] = useState("waiting");
   const [sixSevenTriggered, setSixSevenTriggered] = useState(false);
@@ -146,6 +152,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
       setFaceDetected(false);
       setEar(0);
       setMar(0);
+      setPspiScore(null);
+      setPainCalibrated(false);
       setAngle(0);
       setRepState("waiting");
       setRmsDiv(0);
@@ -177,6 +185,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     setFaceDetected(false);
     setEar(0);
     setMar(0);
+    setPspiScore(null);
+    setPainCalibrated(false);
     setAngle(0);
     setRepState("waiting");
     setRmsDiv(0);
@@ -288,6 +298,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
               setFaceDetected(hasFace || recentlyDetected);
               setEar(pain.ear ?? 0);
               setMar(pain.mar ?? 0);
+              setPspiScore(pain.pspi_score ?? null);
+              setPainCalibrated(pain.calibrated ?? false);
             }
             // Coaching state (throttled)
             if (data.coaching) {
@@ -370,6 +382,8 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     faceDetected,
     ear,
     mar,
+    pspiScore,
+    painCalibrated,
     angle,
     repState,
     sixSevenTriggered,

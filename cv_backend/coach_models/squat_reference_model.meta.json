@@ -1,0 +1,115 @@
+{
+  "exercise_name": "squat",
+  "exercise_display_name": "Squat",
+  "exercise_code": "ex6",
+  "exercise_source": "/home/jietao/GatorMotion/web/public/skeleton_data/ex6_reference.json",
+  "reference_frames": 211,
+  "feature_landmarks": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    31,
+    32
+  ],
+  "correction_landmarks": [
+    25,
+    26,
+    27,
+    28,
+    31,
+    32
+  ],
+  "distance_calibration": {
+    "p50": 0.8433904647827148,
+    "p90": 1.442363977432251,
+    "p99": 2.4500820636749268
+  },
+  "knee_angle_calibration": {
+    "p10": 150.98463439941406,
+    "p50": 175.68722534179688,
+    "p90": 178.09909057617188
+  },
+  "correction_tolerance": {
+    "25": {
+      "x": 0.23986357581868376,
+      "y": 0.2919527017047611,
+      "side": "left",
+      "part": "knee"
+    },
+    "26": {
+      "x": 0.24763714571407,
+      "y": 0.27203167154034075,
+      "side": "right",
+      "part": "knee"
+    },
+    "27": {
+      "x": 0.45937561459234355,
+      "y": 0.3053216450055353,
+      "side": "left",
+      "part": "ankle"
+    },
+    "28": {
+      "x": 0.4807094514030019,
+      "y": 0.35104628267431875,
+      "side": "right",
+      "part": "ankle"
+    },
+    "31": {
+      "x": 0.5241123587904493,
+      "y": 0.3258510243693928,
+      "side": "left",
+      "part": "foot"
+    },
+    "32": {
+      "x": 0.5462928956994346,
+      "y": 0.39455786979152035,
+      "side": "right",
+      "part": "foot"
+    }
+  },
+  "landmark_names": [
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index"
+  ],
+  "reference_quality_score": 0.9938
+}

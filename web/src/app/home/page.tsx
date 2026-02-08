@@ -20,6 +20,7 @@ import {
   Clock,
   X,
   Trash2,
+  Plus,
 } from "lucide-react";
 
 interface Exercise {
@@ -95,6 +96,7 @@ export default function HomePage() {
   const [inviteError, setInviteError] = useState("");
   const [inviteSuccess, setInviteSuccess] = useState("");
   const [showInviteHistory, setShowInviteHistory] = useState(false);
+  const [showInviteForm, setShowInviteForm] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -265,44 +267,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Invite a Patient */}
-          <div className="card animate-in" style={{ animationDelay: "120ms", marginBottom: "var(--space-lg)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-md)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-                <UserPlus size={20} color="var(--color-blue)" />
-                <h3 style={{ fontWeight: 700 }}>Invite a Patient</h3>
-              </div>
-              {invites.filter((i) => i.status !== "pending").length > 0 && (
-                <button
-                  onClick={() => setShowInviteHistory(true)}
-                  style={{ background: "none", border: "none", color: "var(--color-blue)", fontSize: "13px", fontWeight: 600, cursor: "pointer", padding: 0 }}
-                >
-                  History
-                </button>
-              )}
-            </div>
-            <form onSubmit={handleSendInvite} style={{ display: "flex", gap: "var(--space-sm)" }}>
-              <input
-                type="text"
-                className="input"
-                placeholder="patient username"
-                value={inviteUsername}
-                onChange={(e) => setInviteUsername(e.target.value)}
-                required
-                style={{ flex: 1 }}
-              />
-              <button type="submit" className="btn btn-blue" disabled={inviteSending}>
-                {inviteSending ? "..." : "Send"}
-              </button>
-            </form>
-            {inviteError && (
-              <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)" }}>{inviteError}</p>
-            )}
-            {inviteSuccess && (
-              <p style={{ color: "var(--color-green-dark)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)", backgroundColor: "var(--color-green-surface)", padding: "8px 12px", borderRadius: "var(--radius-sm)" }}>{inviteSuccess}</p>
-            )}
-          </div>
-
           {/* Pending Invites */}
           {pendingInvites.length > 0 && (
             <div className="animate-in" style={{ animationDelay: "150ms", marginBottom: "var(--space-lg)" }}>
@@ -334,141 +298,172 @@ export default function HomePage() {
             <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>
               Patients ({patients.length})
             </h3>
-            {patients.length > 0 ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "var(--space-md)" }}>
-                {patients.map((p) => {
-                  const convo = conversations.find((c) => c.partnerId === p._id);
-                  return (
-                    <div
-                      key={p._id}
-                      className="card-interactive"
-                      style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", position: "relative" }}
-                      onClick={() => router.push(`/therapist/patients/${p._id}`)}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <User size={20} color="var(--color-blue)" />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: "15px" }}>{p.name}</div>
-                          <div style={{ fontSize: "12px", color: "var(--color-gray-300)" }}>@{p.username}</div>
-                        </div>
-                        {p.streak && p.streak.currentStreak > 0 && (
-                          <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                            <Flame size={14} color="var(--color-orange)" fill="var(--color-orange)" />
-                            <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--color-orange)" }}>{p.streak.currentStreak}</span>
-                          </div>
-                        )}
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: "4px 6px", position: "absolute", top: 8, right: 8 }}
-                          onClick={(e) => { e.stopPropagation(); handleRemovePatient(p._id); }}
-                          title="Remove patient"
-                        >
-                          <Trash2 size={12} color="var(--color-gray-300)" />
-                        </button>
-                      </div>
-
-                      {/* Floating message bubble */}
-                      {convo && convo.lastMessage && (
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/messages/${p._id}?name=${encodeURIComponent(p.name)}`);
-                          }}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "var(--space-sm)",
-                            padding: "6px 10px",
-                            borderRadius: "var(--radius-md)",
-                            backgroundColor: convo.unreadCount > 0 ? "var(--color-primary-surface)" : "var(--color-snow)",
-                            border: convo.unreadCount > 0 ? "1px solid var(--color-primary)" : "1px solid var(--color-gray-100)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <MessageCircle size={13} color={convo.unreadCount > 0 ? "var(--color-primary)" : "var(--color-gray-300)"} />
-                          <span style={{
-                            flex: 1,
-                            fontSize: "12px",
-                            color: convo.unreadCount > 0 ? "var(--color-gray-600)" : "var(--color-gray-400)",
-                            fontWeight: convo.unreadCount > 0 ? 600 : 400,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}>
-                            {convo.lastMessage.content}
-                          </span>
-                          {convo.unreadCount > 0 && (
-                            <span style={{
-                              backgroundColor: "var(--color-primary)",
-                              color: "white",
-                              fontSize: "10px",
-                              fontWeight: 700,
-                              borderRadius: "var(--radius-full)",
-                              minWidth: 16,
-                              height: 16,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              padding: "0 4px",
-                              flexShrink: 0,
-                            }}>
-                              {convo.unreadCount}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "var(--space-md)" }}>
+              {/* Add Patient "+" Card */}
+              <div
+                onClick={() => { setInviteError(""); setInviteSuccess(""); setShowInviteForm(true); }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  border: "2px dashed var(--color-gray-200)",
+                  borderRadius: "var(--radius-lg)",
+                  cursor: "pointer",
+                  transition: "border-color 0.15s, background 0.15s",
+                  minHeight: 100,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--color-blue)"; e.currentTarget.style.backgroundColor = "var(--color-blue-light)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--color-gray-200)"; e.currentTarget.style.backgroundColor = "transparent"; }}
+              >
+                <Plus size={32} color="var(--color-gray-300)" />
               </div>
-            ) : (
-              <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
-                <Users size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
-                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No patients yet</p>
-                <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>Send an invite above to get started.</p>
-              </div>
-            )}
-          </section>
 
-          {/* Messages */}
-          <section className="animate-in" style={{ animationDelay: "240ms" }}>
-            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Messages</h3>
-            {conversations.length > 0 ? (
-              <div className="stack stack-sm">
-                {conversations.slice(0, 5).map((c) => (
-                  <Link key={c.partnerId} href={`/messages/${c.partnerId}?name=${encodeURIComponent(c.partnerName)}`} style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}>
-                    <div className="card-interactive" style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", overflow: "hidden" }}>
+              {patients.map((p) => {
+                const convo = conversations.find((c) => c.partnerId === p._id);
+                return (
+                  <div
+                    key={p._id}
+                    className="card-interactive"
+                    style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)", position: "relative" }}
+                    onClick={() => router.push(`/therapist/patients/${p._id}`)}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
                       <div style={{ width: 40, height: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <User size={20} color="var(--color-blue)" />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontWeight: 700, fontSize: "var(--text-small)" }}>{c.partnerName}</span>
-                          {c.unreadCount > 0 && (
-                            <span style={{ backgroundColor: "var(--color-primary)", color: "white", fontSize: "11px", fontWeight: 700, borderRadius: "var(--radius-full)", minWidth: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
-                              {c.unreadCount}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: "var(--text-small)", color: "var(--color-gray-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                          {c.lastMessage ? c.lastMessage.content : "No messages yet"}
-                        </div>
+                        <div style={{ fontWeight: 700, fontSize: "15px" }}>{p.name}</div>
+                        <div style={{ fontSize: "12px", color: "var(--color-gray-300)" }}>@{p.username}</div>
                       </div>
+                      {p.streak && p.streak.currentStreak > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                          <Flame size={14} color="var(--color-orange)" fill="var(--color-orange)" />
+                          <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--color-orange)" }}>{p.streak.currentStreak}</span>
+                        </div>
+                      )}
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "4px 6px", position: "absolute", top: 8, right: 8 }}
+                        onClick={(e) => { e.stopPropagation(); handleRemovePatient(p._id); }}
+                        title="Remove patient"
+                      >
+                        <Trash2 size={12} color="var(--color-gray-300)" />
+                      </button>
                     </div>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
-                <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
-                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
-                <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>Messages with your patients will appear here.</p>
-              </div>
-            )}
+
+                    {/* Floating message bubble */}
+                    {convo && convo.lastMessage && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/messages/${p._id}?name=${encodeURIComponent(p.name)}`);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-sm)",
+                          padding: "6px 10px",
+                          borderRadius: "var(--radius-md)",
+                          backgroundColor: convo.unreadCount > 0 ? "var(--color-primary-surface)" : "var(--color-snow)",
+                          border: convo.unreadCount > 0 ? "1px solid var(--color-primary)" : "1px solid var(--color-gray-100)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <MessageCircle size={13} color={convo.unreadCount > 0 ? "var(--color-primary)" : "var(--color-gray-300)"} />
+                        <span style={{
+                          flex: 1,
+                          fontSize: "12px",
+                          color: convo.unreadCount > 0 ? "var(--color-gray-600)" : "var(--color-gray-400)",
+                          fontWeight: convo.unreadCount > 0 ? 600 : 400,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}>
+                          {convo.lastMessage.content}
+                        </span>
+                        {convo.unreadCount > 0 && (
+                          <span style={{
+                            backgroundColor: "var(--color-primary)",
+                            color: "white",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            borderRadius: "var(--radius-full)",
+                            minWidth: 16,
+                            height: 16,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: "0 4px",
+                            flexShrink: 0,
+                          }}>
+                            {convo.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </section>
+
         </div>
+
+        {/* Invite Patient Modal */}
+        {showInviteForm && (
+          <div
+            onClick={() => setShowInviteForm(false)}
+            style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "var(--space-md)" }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: "var(--color-surface)", borderRadius: "var(--radius-lg)", width: "100%", maxWidth: 420, display: "flex", flexDirection: "column", overflow: "hidden" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-md) var(--space-lg)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                  <UserPlus size={20} color="var(--color-blue)" />
+                  <h3 style={{ fontWeight: 700 }}>Invite a Patient</h3>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                  {invites.filter((i) => i.status !== "pending").length > 0 && (
+                    <button
+                      onClick={() => { setShowInviteForm(false); setShowInviteHistory(true); }}
+                      style={{ background: "none", border: "none", color: "var(--color-blue)", fontSize: "13px", fontWeight: 600, cursor: "pointer", padding: 0 }}
+                    >
+                      History
+                    </button>
+                  )}
+                  <button onClick={() => setShowInviteForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-gray-400)", padding: 4 }}>
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ padding: "0 var(--space-lg) var(--space-lg)" }}>
+                <form onSubmit={(e) => { handleSendInvite(e); }} style={{ display: "flex", gap: "var(--space-sm)" }}>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="patient username"
+                    value={inviteUsername}
+                    onChange={(e) => setInviteUsername(e.target.value)}
+                    required
+                    autoFocus
+                    style={{ flex: 1 }}
+                  />
+                  <button type="submit" className="btn btn-blue" disabled={inviteSending}>
+                    {inviteSending ? "..." : "Send"}
+                  </button>
+                </form>
+                {inviteError && (
+                  <p style={{ color: "var(--color-red)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)" }}>{inviteError}</p>
+                )}
+                {inviteSuccess && (
+                  <p style={{ color: "var(--color-green-dark)", fontSize: "14px", fontWeight: 600, marginTop: "var(--space-sm)", backgroundColor: "var(--color-green-surface)", padding: "8px 12px", borderRadius: "var(--radius-sm)" }}>{inviteSuccess}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Invite History Modal */}
         {showInviteHistory && (

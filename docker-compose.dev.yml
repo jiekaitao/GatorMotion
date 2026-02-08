@@ -18,5 +18,5 @@ services:
       - ./cv_backend/coach_engine.py:/app/coach_engine.py
       - ./cv_backend/train_reference.py:/app/train_reference.py
       - ./cv_backend/pt_coach:/app/pt_coach
-      - ./cv_backend/models:/app/models
+      - ./cv_backend/coach_models:/app/coach_models
       - ./web/public/skeleton_data:/app/skeleton_data

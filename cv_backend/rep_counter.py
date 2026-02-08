@@ -244,7 +244,7 @@ class SixSevenDetector:
         return {"triggered": False}
 
 
-class PainDetector:
+class HeuristicPainDetector:
     def __init__(self):
         self.pain_level = "normal"
         self.message = ""

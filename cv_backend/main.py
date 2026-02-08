@@ -18,7 +18,8 @@ import mediapipe as mp
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from rep_counter import RepCounter, PainDetector, SixSevenDetector
+from rep_counter import RepCounter, SixSevenDetector
+from ml_pain_detector import MLPainDetector
 from coach_engine import CoachV2Engine
 from train_reference import ensure_models_exist
 from pt_coach.common import landmarks_list_to_np
@@ -41,8 +42,11 @@ POSE_MODEL = os.path.join(MODELS_DIR, "pose_landmarker_heavy.task")
 HAND_MODEL = os.path.join(MODELS_DIR, "hand_landmarker.task")
 FACE_MODEL = os.path.join(MODELS_DIR, "face_landmarker.task")
 
-SKELETON_DATA_DIR = Path(__file__).parent.parent / "web" / "public" / "skeleton_data"
-COACH_MODELS_DIR = Path(__file__).parent / "models"
+# Skeleton data: check local dev path first, then Docker mount path
+_skel_dev = Path(__file__).parent.parent / "web" / "public" / "skeleton_data"
+_skel_docker = Path(__file__).parent / "skeleton_data"
+SKELETON_DATA_DIR = _skel_dev if _skel_dev.exists() else _skel_docker
+COACH_MODELS_DIR = Path(__file__).parent / "coach_models"
 
 coach_model_paths: dict[str, Path] = {}
 
@@ -101,7 +105,12 @@ def load_models():
         )
     )
 
+    import sys
+    print(f"[coach] SKELETON_DATA_DIR={SKELETON_DATA_DIR} exists={SKELETON_DATA_DIR.exists()}", flush=True)
+    print(f"[coach] COACH_MODELS_DIR={COACH_MODELS_DIR} exists={COACH_MODELS_DIR.exists()}", flush=True)
     coach_model_paths = ensure_models_exist(SKELETON_DATA_DIR, COACH_MODELS_DIR)
+    print(f"[coach] Loaded models: {list(coach_model_paths.keys())}", flush=True)
+    sys.stdout.flush()
 
 
 @app.on_event("shutdown")
@@ -245,7 +254,7 @@ async def ws_exercise(websocket: WebSocket):
     detectors.add("pose")
 
     rep_counter = RepCounter(exercise_key)
-    pain_detector = PainDetector()
+    pain_detector = MLPainDetector()
     six_seven_detector = SixSevenDetector()
 
     coach_engine: CoachV2Engine | None = None
@@ -271,6 +280,7 @@ async def ws_exercise(websocket: WebSocket):
                 continue
 
             h, w = rgb.shape[:2]
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
             # Run landmark detection
             tracking = await _process_frame(rgb, detectors)
@@ -297,19 +307,9 @@ async def ws_exercise(websocket: WebSocket):
                 lm_objects = [LM(d) for d in pose_lms]
                 exercise_status = rep_counter.update(lm_objects, w, h)
 
-            # Pain detection from face landmarks
-            pain_status = {
-                "level": "normal",
-                "message": "",
-                "face_detected": False,
-                "ear": 0.0,
-                "mar": 0.0,
-            }
-            if (
-                "face" in detectors
-                and tracking["face"]
-                and len(tracking["face"]) > 0
-            ):
+            # Pain detection (ML-based with heuristic fallback)
+            flm_objects = None
+            if "face" in detectors and tracking["face"] and len(tracking["face"]) > 0:
                 face_lms = tracking["face"][0]
 
                 class FLM:
@@ -319,14 +319,8 @@ async def ws_exercise(websocket: WebSocket):
                         self.z = d.get("z", 0)
 
                 flm_objects = [FLM(d) for d in face_lms]
-                result = pain_detector.update(flm_objects, w, h)
-                pain_status = {
-                    "level": result[0],
-                    "message": result[1],
-                    "face_detected": True,
-                    "ear": round(result[2], 4),
-                    "mar": round(result[3], 4),
-                }
+
+            pain_status = pain_detector.update(bgr, flm_objects, w, h)
 
             # 6-7 Easter egg detection from pose wrist landmarks
             six_seven_status = {"triggered": False}
@@ -349,3 +343,5 @@ async def ws_exercise(websocket: WebSocket):
             await websocket.send_json(response)
     except WebSocketDisconnect:
         pass
+    finally:
+        pain_detector.close()

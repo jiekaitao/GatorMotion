@@ -12,6 +12,8 @@ interface DebugPanelProps {
   painLevel: string;
   ear: number;
   mar: number;
+  pspiScore?: number | null;
+  painCalibrated?: boolean;
   repCount: number;
   repState: string;
   angle: number;
@@ -55,6 +57,8 @@ export default function DebugPanel({
   painLevel,
   ear,
   mar,
+  pspiScore,
+  painCalibrated,
   repCount,
   repState,
   angle,
@@ -99,6 +103,21 @@ export default function DebugPanel({
             <span>{mar.toFixed(4)}</span>
             <span style={{ color: "#666", fontSize: "10px", marginLeft: 4 }}>
               {mar > 0.6 ? "(open)" : "(closed)"}
+            </span>
+          </Row>
+
+          <Row label="PSPI">
+            <span style={{
+              color: pspiScore != null && pspiScore >= 3 ? "#EA2B2B" : pspiScore != null && pspiScore >= 1 ? "#FF9600" : "#ccc",
+              fontWeight: 700,
+            }}>
+              {pspiScore != null ? pspiScore.toFixed(3) : "—"}
+            </span>
+          </Row>
+
+          <Row label="Calibrated">
+            <span style={{ color: painCalibrated ? "#58CC02" : "#1CB0F6", fontWeight: 700 }}>
+              {painCalibrated ? "yes" : "calibrating"}
             </span>
           </Row>
 

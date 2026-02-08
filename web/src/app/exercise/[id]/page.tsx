@@ -135,6 +135,8 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     faceDetected,
     ear,
     mar,
+    pspiScore,
+    painCalibrated,
     angle,
     repState,
     sixSevenTriggered,
@@ -887,6 +889,18 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                 }}>
                   {faceDetected ? "Face Detected" : "Face Not Detected"}
                 </div>
+                {faceDetected && !painCalibrated && (
+                  <div style={{
+                    padding: "4px 8px",
+                    borderRadius: "var(--radius-sm)",
+                    backgroundColor: "rgba(28,176,246,0.85)",
+                    color: "white",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                  }}>
+                    Calibrating...
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -901,6 +915,8 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
               painLevel={painLevel}
               ear={ear}
               mar={mar}
+              pspiScore={pspiScore}
+              painCalibrated={painCalibrated}
               repState={repState}
               angle={angle}
             />
@@ -1000,6 +1016,8 @@ function CoachingPanel({
   painLevel,
   ear,
   mar,
+  pspiScore,
+  painCalibrated,
   repState,
   angle,
 }: {
@@ -1010,6 +1028,8 @@ function CoachingPanel({
   painLevel: string;
   ear: number;
   mar: number;
+  pspiScore: number | null;
+  painCalibrated: boolean;
   repState: string;
   angle: number;
 }) {
@@ -1099,6 +1119,7 @@ function CoachingPanel({
       }}>
         <span>EAR: <span style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--color-gray-500)" }}>{ear.toFixed(3)}</span> {ear < 0.21 ? "(closed)" : "(open)"}</span>
         <span>MAR: <span style={{ fontFamily: "monospace", fontWeight: 600, color: "var(--color-gray-500)" }}>{mar.toFixed(3)}</span> {mar > 0.6 ? "(open)" : "(closed)"}</span>
+        <span>PSPI: <span style={{ fontFamily: "monospace", fontWeight: 600, color: pspiScore !== null && pspiScore >= 3 ? "#EA2B2B" : pspiScore !== null && pspiScore >= 1 ? "#FF9600" : "var(--color-gray-500)" }}>{pspiScore !== null ? pspiScore.toFixed(2) : "—"}</span> {!painCalibrated && <span style={{ color: "#1CB0F6" }}>(cal)</span>}</span>
         <span>Corrections: <span style={{ fontWeight: 700, color: "var(--color-orange)" }}>{coachingMessages.length}</span></span>
       </div>
 

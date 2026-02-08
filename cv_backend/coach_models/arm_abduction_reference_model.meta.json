@@ -1,0 +1,115 @@
+{
+  "exercise_name": "arm_abduction",
+  "exercise_display_name": "Arm Abduction",
+  "exercise_code": "ex1",
+  "exercise_source": "/home/jietao/GatorMotion/web/public/skeleton_data/ex1_reference.json",
+  "reference_frames": 511,
+  "feature_landmarks": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    31,
+    32
+  ],
+  "correction_landmarks": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "distance_calibration": {
+    "p50": 0.7903763651847839,
+    "p90": 1.189116358757019,
+    "p99": 1.7603610754013062
+  },
+  "knee_angle_calibration": {
+    "p10": 178.09205627441406,
+    "p50": 178.3496856689453,
+    "p90": 178.63116455078125
+  },
+  "correction_tolerance": {
+    "11": {
+      "x": 0.13286446604455524,
+      "y": 0.10397819838429087,
+      "side": "left",
+      "part": "shoulder"
+    },
+    "12": {
+      "x": 0.13178064714096813,
+      "y": 0.09478758617074676,
+      "side": "right",
+      "part": "shoulder"
+    },
+    "13": {
+      "x": 0.07902591376849763,
+      "y": 0.10058766831758079,
+      "side": "left",
+      "part": "elbow"
+    },
+    "14": {
+      "x": 0.1488790013490042,
+      "y": 0.1858802719371306,
+      "side": "right",
+      "part": "elbow"
+    },
+    "15": {
+      "x": 0.05,
+      "y": 0.11138466457767279,
+      "side": "left",
+      "part": "wrist"
+    },
+    "16": {
+      "x": 0.18198341939080961,
+      "y": 0.24345600403811127,
+      "side": "right",
+      "part": "wrist"
+    }
+  },
+  "landmark_names": [
+    "nose",
+    "left_eye_inner",
+    "left_eye",
+    "left_eye_outer",
+    "right_eye_inner",
+    "right_eye",
+    "right_eye_outer",
+    "left_ear",
+    "right_ear",
+    "mouth_left",
+    "mouth_right",
+    "left_shoulder",
+    "right_shoulder",
+    "left_elbow",
+    "right_elbow",
+    "left_wrist",
+    "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
+    "left_hip",
+    "right_hip",
+    "left_knee",
+    "right_knee",
+    "left_ankle",
+    "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index"
+  ],
+  "reference_quality_score": 0.9867
+}
