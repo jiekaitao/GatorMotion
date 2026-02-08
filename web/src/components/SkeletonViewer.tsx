@@ -108,7 +108,7 @@ export default function SkeletonViewer({
     const dpr = window.devicePixelRatio || 1;
     const frame = data.frames[frameIndex];
     const landmarks = frame.landmarks;
-    const pad = 0.1;
+    const pad = 0.04;
 
     // Clear
     ctx.fillStyle = backgroundColor;

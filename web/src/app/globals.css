@@ -123,6 +123,13 @@ a { color: var(--color-blue); text-decoration: none; }
   min-height: 100vh;
 }
 
+@media (max-width: 767px) {
+  .app-shell {
+    height: 100dvh;
+    overflow: hidden;
+  }
+}
+
 /* ── Sidebar (Desktop only) ── */
 .sidebar {
   display: none;
@@ -244,8 +251,19 @@ a { color: var(--color-blue); text-decoration: none; }
   min-width: 0;
 }
 
+@media (max-width: 767px) {
+  .main-content {
+    overflow-y: auto;
+    padding-bottom: 70px;
+  }
+}
+
 /* ── Page Transition ── */
 .page-transition {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-exit {
@@ -728,6 +746,18 @@ a { color: var(--color-blue); text-decoration: none; }
   display: flex;
   justify-content: center;
   z-index: 50;
+  animation: slideUpCta 0.4s var(--ease-out) 0.3s both;
+}
+
+@keyframes slideUpCta {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (min-width: 768px) {
@@ -1068,6 +1098,170 @@ a { color: var(--color-blue); text-decoration: none; }
   overflow: hidden;
   border: 2px solid var(--color-gray-100);
   background-color: #1a1a2e;
+}
+
+/* Hero variant for exercise ready/countdown screen */
+.skeleton-viewer-hero {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background-color: #1a1a2e;
+}
+
+/* ── Hero Layout ── */
+.hero-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  gap: 0;
+  overflow: hidden;
+}
+
+.hero-demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  max-width: 380px;
+  width: 100%;
+  transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: heroFadeIn 0.6s ease-out both;
+}
+
+@keyframes heroFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hero-instructions {
+  width: 100%;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--color-gray-100);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+/* Expanded: slide demo left on desktop */
+@media (min-width: 1024px) {
+  .hero-expanded .hero-demo {
+    transform: translateX(-80px);
+  }
+}
+
+/* ── Hero Info Panel (bezier connectors + cards) ── */
+.hero-info-panel {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .hero-info-panel {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    opacity: 0;
+    animation: heroInfoFadeIn 0.5s ease-out 0.3s forwards;
+  }
+}
+
+@keyframes heroInfoFadeIn {
+  to { opacity: 1; }
+}
+
+.hero-connectors {
+  width: 100px;
+  height: 340px;
+  flex-shrink: 0;
+}
+
+.hero-connector-line {
+  fill: none;
+  stroke: var(--color-primary);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
+  opacity: 0.4;
+}
+
+.hero-connector-1 { animation: drawConnector 0.8s ease-out 0.4s forwards; }
+.hero-connector-2 { animation: drawConnector 0.8s ease-out 0.6s forwards; }
+.hero-connector-3 { animation: drawConnector 0.8s ease-out 0.8s forwards; }
+
+@keyframes drawConnector {
+  to { stroke-dashoffset: 0; }
+}
+
+.hero-info-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 260px;
+}
+
+.hero-info-card {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  border: 1px solid var(--color-gray-100);
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-start;
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.hero-card-1 { animation: heroCardSlideIn 0.5s ease-out 0.5s forwards; }
+.hero-card-2 { animation: heroCardSlideIn 0.5s ease-out 0.7s forwards; }
+.hero-card-3 { animation: heroCardSlideIn 0.5s ease-out 0.9s forwards; }
+
+@keyframes heroCardSlideIn {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.hero-info-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Camera Instructions (below video in active layout) ── */
+.camera-instructions {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-gray-100);
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-start;
+}
+
+/* Transition animation when switching from hero to active layout */
+.exercise-transition-in {
+  animation: exerciseFadeIn 0.6s ease-out both;
+}
+
+@keyframes exerciseFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Thumbnail variant for exercise cards */

@@ -284,9 +284,11 @@ export default function HomePage() {
               Daily Progress
             </h2>
             <p style={{ color: "var(--color-gray-400)", fontWeight: 500, marginBottom: "var(--space-lg)" }}>
-              {totalCount > 0 && completedCount === totalCount
+              {completedCount === totalCount
                 ? `You're all done for today, ${userData.user.name.split(" ")[0]}!`
-                : `You're crushing your recovery goals, ${userData.user.name.split(" ")[0]}!`}
+                : completedCount === 0
+                  ? `Let's get started, ${userData.user.name.split(" ")[0]}!`
+                  : `Keep it up, ${userData.user.name.split(" ")[0]}!`}
             </p>
 
             {/* Progress label + bar */}

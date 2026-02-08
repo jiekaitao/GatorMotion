@@ -93,8 +93,9 @@ export default function ChatPage() {
       style={{
         display: "flex",
         flexDirection: "column",
-        height: "calc(100dvh - 120px)",
-        maxHeight: "calc(100dvh - 120px)",
+        flex: 1,
+        minHeight: 0,
+        overflow: "hidden",
       }}
     >
       {/* Chat Header */}
