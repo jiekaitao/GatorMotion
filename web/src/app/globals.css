@@ -246,7 +246,6 @@ a { color: var(--color-blue); text-decoration: none; }
 
 /* ── Page Transition ── */
 .page-transition {
-  will-change: opacity, transform;
 }
 
 .page-exit {

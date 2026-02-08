@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useRef, useCallback, use, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Check, Calendar, Dumbbell, Clock, CheckCircle2, Minus, Plus } from "lucide-react";
+import { ChevronLeft, Check, Calendar, Dumbbell, Minus, Plus, Send, MessageCircle } from "lucide-react";
 import SkeletonViewer from "@/components/SkeletonViewer";
 
 interface Exercise {
@@ -41,13 +41,19 @@ interface ExerciseConfig {
   reps: number;
 }
 
+interface ChatMessage {
+  _id: string;
+  content: string;
+  isMine: boolean;
+  createdAt: string;
+}
+
 export default function PatientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
 
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [todayAssignment, setTodayAssignment] = useState<Assignment | null>(null);
-  const [history, setHistory] = useState<Assignment[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [configs, setConfigs] = useState<Record<string, ExerciseConfig>>({});
@@ -56,6 +62,13 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
   const [assigning, setAssigning] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [error, setError] = useState("");
+
+  // Chat state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [newMsg, setNewMsg] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -68,11 +81,9 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
         } else {
           setPatient(patientData.patient);
           setTodayAssignment(patientData.todayAssignment);
-          setHistory(patientData.history || []);
         }
         const exList: Exercise[] = exerciseData.exercises || [];
         setExercises(exList);
-        // Initialize configs with defaults
         const initial: Record<string, ExerciseConfig> = {};
         for (const ex of exList) {
           initial[ex._id] = { sets: ex.defaultSets, reps: ex.defaultReps };
@@ -82,6 +93,42 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
       .catch(() => setError("Failed to load data"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Chat: fetch messages
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/messages/${id}`);
+      const data = await res.json();
+      setMessages(data.messages || []);
+    } catch { /* ignore */ }
+  }, [id]);
+
+  useEffect(() => {
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [fetchMessages]);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleSend(e: FormEvent) {
+    e.preventDefault();
+    if (!newMsg.trim()) return;
+    setSending(true);
+    try {
+      await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: id, content: newMsg.trim() }),
+      });
+      setNewMsg("");
+      await fetchMessages();
+    } catch { /* ignore */ }
+    finally { setSending(false); }
+  }
 
   function toggleExercise(exerciseId: string) {
     setSelected((prev) => {
@@ -140,7 +187,6 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
         setSelected(new Set());
         const patientData = await fetch(`/api/patients/${id}`).then((r) => r.json());
         setTodayAssignment(patientData.todayAssignment);
-        setHistory(patientData.history || []);
         setTimeout(() => setSuccessMsg(""), 4000);
       }
     } catch {
@@ -150,11 +196,6 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  function formatDate(dateStr: string) {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  }
-
   if (loading) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", color: "var(--color-gray-300)" }}>
@@ -162,8 +203,6 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
       </div>
     );
   }
-
-  const hasHistory = history.length > 0;
 
   return (
     <div className="page">
@@ -233,8 +272,8 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* Two-column layout: Assign Exercises + History */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "var(--space-xl)", alignItems: "start" }}>
+      {/* Two-column layout: Assign Exercises + Chat */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: "var(--space-xl)", alignItems: "start" }}>
         {/* LEFT: Assign Exercises */}
         <div className="animate-in" style={{ animationDelay: "120ms" }}>
           <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-sm)" }}>
@@ -275,7 +314,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
             </span>
           </div>
 
-          {/* Exercise cards — vertical Pokemon-style grid */}
+          {/* Exercise cards */}
           <div style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
@@ -326,9 +365,9 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                     {isSelected && <Check size={14} color="white" strokeWidth={3} />}
                   </div>
 
-                  {/* Clickable area for select/deselect */}
+                  {/* Clickable area */}
                   <div onClick={() => toggleExercise(ex._id)}>
-                    {/* Top: Skeleton preview or placeholder */}
+                    {/* Skeleton preview or placeholder */}
                     <div style={{
                       width: "100%",
                       aspectRatio: "3/4",
@@ -369,7 +408,7 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                       )}
                     </div>
 
-                    {/* Bottom: Info */}
+                    {/* Info */}
                     <div style={{ padding: "12px 14px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ fontWeight: 800, fontSize: "15px", lineHeight: 1.2 }}>{ex.name}</div>
                       <div style={{
@@ -401,40 +440,26 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
                     }}
                   >
                     <div style={{ padding: "10px 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-                      {/* Sets */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-gray-400)" }}>Sets</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "sets", -1); }}
-                            className="stepper-btn"
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "sets", -1); }} className="stepper-btn">
                             <Minus size={14} />
                           </button>
                           <span style={{ fontSize: "14px", fontWeight: 700, minWidth: 20, textAlign: "center" }}>{cfg?.sets ?? ex.defaultSets}</span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "sets", 1); }}
-                            className="stepper-btn"
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "sets", 1); }} className="stepper-btn">
                             <Plus size={14} />
                           </button>
                         </div>
                       </div>
-                      {/* Reps */}
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-gray-400)" }}>Reps</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "reps", -1); }}
-                            className="stepper-btn"
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "reps", -1); }} className="stepper-btn">
                             <Minus size={14} />
                           </button>
                           <span style={{ fontSize: "14px", fontWeight: 700, minWidth: 20, textAlign: "center" }}>{cfg?.reps ?? ex.defaultReps}</span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "reps", 1); }}
-                            className="stepper-btn"
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); updateConfig(ex._id, "reps", 1); }} className="stepper-btn">
                             <Plus size={14} />
                           </button>
                         </div>
@@ -471,74 +496,110 @@ export default function PatientDetailPage({ params }: { params: Promise<{ id: st
           </button>
         </div>
 
-        {/* RIGHT: Patient History */}
+        {/* RIGHT: Chat with Patient */}
         <div
           className="animate-in"
           style={{
             animationDelay: "180ms",
-            opacity: hasHistory ? 1 : 0.45,
-            pointerEvents: hasHistory ? "auto" : "none",
+            display: "flex",
+            flexDirection: "column",
+            height: "calc(100vh - 200px)",
+            minHeight: 400,
+            borderRadius: "var(--radius-lg)",
+            border: "2px solid var(--color-gray-100)",
+            backgroundColor: "var(--color-white)",
+            overflow: "hidden",
           }}
         >
-          <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)", display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-            <Clock size={20} />
-            History
-          </h3>
+          {/* Chat header */}
+          <div style={{
+            padding: "var(--space-md)",
+            borderBottom: "2px solid var(--color-gray-100)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-sm)",
+            flexShrink: 0,
+          }}>
+            <MessageCircle size={18} color="var(--color-primary)" />
+            <span style={{ fontWeight: 700, fontSize: "14px" }}>
+              Chat with {patient?.name.split(" ")[0] || "Patient"}
+            </span>
+          </div>
 
-          {!hasHistory ? (
-            <div className="card" style={{ textAlign: "center", padding: "var(--space-xl) var(--space-lg)" }}>
-              <Clock size={32} color="var(--color-gray-200)" style={{ marginBottom: "var(--space-sm)" }} />
-              <p style={{ fontWeight: 600, color: "var(--color-gray-300)", fontSize: "14px" }}>No history yet</p>
-              <p style={{ color: "var(--color-gray-200)", fontSize: "12px", marginTop: 4 }}>
-                Assignments will appear here once assigned.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-              {history.map((assignment) => {
-                const completedCount = assignment.exercises.filter((e) => e.completed).length;
-                const total = assignment.exercises.length;
-                return (
-                  <div
-                    key={assignment._id}
-                    className="card"
-                    style={{ padding: "var(--space-md)" }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-sm)" }}>
-                      <span style={{ fontWeight: 700, fontSize: "14px" }}>{formatDate(assignment.date)}</span>
-                      {assignment.allCompleted ? (
-                        <CheckCircle2 size={18} color="var(--color-green)" />
-                      ) : (
-                        <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--color-gray-300)" }}>
-                          {completedCount}/{total}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {assignment.exercises.map((ex, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: "var(--radius-full)",
-                            backgroundColor: ex.completed ? "var(--color-green)" : "var(--color-gray-200)",
-                            flexShrink: 0,
-                          }} />
-                          <span style={{
-                            fontSize: "13px",
-                            fontWeight: 500,
-                            color: ex.completed ? "var(--color-gray-400)" : "var(--color-gray-300)",
-                          }}>
-                            {ex.exerciseName}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+          {/* Messages area */}
+          <div style={{
+            flex: 1,
+            overflowY: "auto",
+            padding: "var(--space-md)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "var(--space-sm)",
+          }}>
+            {messages.length === 0 && (
+              <div style={{ textAlign: "center", color: "var(--color-gray-300)", marginTop: "var(--space-2xl)", flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <MessageCircle size={36} style={{ marginBottom: "var(--space-sm)", opacity: 0.3 }} />
+                <p style={{ fontWeight: 600, fontSize: "13px" }}>No messages yet</p>
+                <p style={{ fontSize: "12px", marginTop: 4, color: "var(--color-gray-200)" }}>Send a message to start the conversation.</p>
+              </div>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg._id}
+                style={{
+                  display: "flex",
+                  justifyContent: msg.isMine ? "flex-end" : "flex-start",
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: "85%",
+                    padding: "8px 12px",
+                    borderRadius: msg.isMine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                    backgroundColor: msg.isMine ? "var(--color-primary)" : "var(--color-snow)",
+                    color: msg.isMine ? "white" : "var(--color-gray-600)",
+                    fontSize: "13px",
+                    lineHeight: 1.4,
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {msg.content}
+                  <div style={{ fontSize: "10px", marginTop: 3, opacity: 0.5, textAlign: "right" }}>
+                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input bar */}
+          <form
+            onSubmit={handleSend}
+            style={{
+              display: "flex",
+              gap: "var(--space-sm)",
+              padding: "var(--space-sm) var(--space-md)",
+              borderTop: "2px solid var(--color-gray-100)",
+              flexShrink: 0,
+            }}
+          >
+            <input
+              type="text"
+              className="input"
+              placeholder="Type a message..."
+              value={newMsg}
+              onChange={(e) => setNewMsg(e.target.value)}
+              style={{ flex: 1, fontSize: "13px", padding: "8px 12px" }}
+            />
+            <button
+              type="submit"
+              className="btn btn-teal"
+              disabled={sending || !newMsg.trim()}
+              style={{ padding: "8px 12px" }}
+            >
+              <Send size={16} />
+            </button>
+          </form>
         </div>
       </div>
     </div>

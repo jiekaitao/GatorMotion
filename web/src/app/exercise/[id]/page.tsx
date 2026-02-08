@@ -34,6 +34,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const [phase, setPhase] = useState<"ready" | "countdown" | "active" | "done">("ready");
   const [completing, setCompleting] = useState(false);
   const [allDone, setAllDone] = useState(false);
+  const [currentSet, setCurrentSet] = useState(1);
   const [currentRep, setCurrentRep] = useState(0);
 
   // WebSocket-driven rep counting (only when exerciseKey is set)
@@ -54,13 +55,18 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     }
   }, [wsRepCount, exerciseKey, currentRep]);
 
-  // Auto-complete when reps reached
+  // Auto-advance set or complete when reps reached
   useEffect(() => {
     if (phase === "active" && currentRep >= reps && !completing) {
-      handleComplete();
+      if (currentSet < sets) {
+        setCurrentSet((s) => s + 1);
+        setCurrentRep(0);
+      } else {
+        handleComplete();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRep, reps, phase, completing]);
+  }, [currentRep, reps, phase, completing, currentSet, sets]);
 
   const handleCountdownComplete = useCallback(() => {
     setPhase("active");
@@ -107,8 +113,9 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     }
   }
 
-  const totalReps = reps;
-  const progressPct = totalReps > 0 ? (currentRep / totalReps) * 100 : 0;
+  const totalReps = sets * reps;
+  const completedReps = (currentSet - 1) * reps + currentRep;
+  const progressPct = totalReps > 0 ? (completedReps / totalReps) * 100 : 0;
 
   // Form quality badge
   const formBadge = exerciseKey
@@ -182,17 +189,38 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           <X size={28} />
         </button>
 
-        {/* Progress bar */}
-        <div style={{ flex: 1, margin: "0 var(--space-xl)", maxWidth: 600 }}>
-          <div className="progress-track">
-            <div className="progress-fill-teal progress-fill" style={{ width: `${progressPct}%`, backgroundColor: "var(--color-primary)" }} />
+        {/* Segmented progress bar with flame icon */}
+        <div style={{ flex: 1, margin: "0 var(--space-xl)", maxWidth: 600, position: "relative" }}>
+          <div style={{ display: "flex", gap: 4 }}>
+            {Array.from({ length: sets }, (_, i) => {
+              const setStart = (i / sets) * 100;
+              const setEnd = ((i + 1) / sets) * 100;
+              const segmentFill = progressPct >= setEnd ? 100 : progressPct <= setStart ? 0 : ((progressPct - setStart) / (setEnd - setStart)) * 100;
+              return (
+                <div key={i} className="progress-track" style={{ flex: 1 }}>
+                  <div className="progress-fill" style={{ width: `${segmentFill}%`, backgroundColor: "var(--color-primary)" }} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{
+            position: "absolute",
+            top: "50%",
+            left: `calc(${progressPct}% + ${(progressPct / 100) * (sets - 1) * 4}px)`,
+            transform: "translate(-50%, -50%)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "left 0.3s ease",
+            zIndex: 1,
+          }}>
+            <Flame size={22} color={completedReps > 0 ? "var(--color-orange)" : "var(--color-gray-200)"} fill={completedReps > 0 ? "var(--color-orange)" : "var(--color-gray-200)"} />
           </div>
         </div>
 
-        {/* Rep counter */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--color-primary)", fontWeight: 700 }}>
-          <Flame size={20} color="var(--color-orange)" fill="var(--color-orange)" />
-          <span>{currentRep}</span>
+        {/* Set & rep counter */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--color-primary)", fontWeight: 700, whiteSpace: "nowrap" }}>
+          <span>Set {currentSet}/{sets}</span>
         </div>
       </header>
 
@@ -200,9 +228,9 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
       <div className="session-layout">
         {/* Camera Feed */}
         <div className="session-camera">
-          <div style={{ width: "100%", height: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
+          <div style={{ width: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
             <CameraFeed
-              active={phase === "active" || phase === "countdown"}
+              active={phase !== "done"}
               onVideoReady={handleVideoReady}
             />
 
@@ -278,7 +306,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           {skeletonDataFile && (
             <SkeletonViewer
               skeletonDataFile={skeletonDataFile}
-              playing={phase === "active"}
+              playing={phase !== "done"}
               mirror
             />
           )}
@@ -297,7 +325,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                   {currentRep}
                 </span>
                 <span style={{ fontSize: "24px", fontWeight: 700, color: "var(--color-gray-200)" }}>
-                  / {totalReps}
+                  / {reps}
                 </span>
               </div>
             </div>
@@ -308,7 +336,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                 width: 88,
                 height: 88,
                 borderRadius: "var(--radius-full)",
-                background: `conic-gradient(var(--color-primary) ${progressPct}%, var(--color-gray-100) 0)`,
+                background: `conic-gradient(var(--color-primary) ${reps > 0 ? (currentRep / reps) * 100 : 0}%, var(--color-gray-100) 0)`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

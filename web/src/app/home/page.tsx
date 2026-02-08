@@ -176,14 +176,11 @@ export default function HomePage() {
             <section className="animate-in" style={{ animationDelay: "180ms" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
                 <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Messages</h3>
-                <Link href="/messages" className="text-small" style={{ color: "var(--color-blue)", fontWeight: 600 }}>
-                  View All
-                </Link>
               </div>
               {conversations.length > 0 ? (
                 <div className="stack stack-sm">
                   {conversations.slice(0, 5).map((c) => (
-                    <Link key={c.partnerId} href="/messages" style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}>
+                    <Link key={c.partnerId} href={`/messages/${c.partnerId}?name=${encodeURIComponent(c.partnerName)}`} style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}>
                       <div className="card-interactive" style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", overflow: "hidden" }}>
                         <div style={{ width: 40, height: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                           <User size={20} color="var(--color-blue)" />
@@ -621,7 +618,7 @@ export default function HomePage() {
                 {conversations.map((c) => (
                   <Link
                     key={c.partnerId}
-                    href="/messages"
+                    href={`/messages/${c.partnerId}?name=${encodeURIComponent(c.partnerName)}`}
                     style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}
                   >
                     <div

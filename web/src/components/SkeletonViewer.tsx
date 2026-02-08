@@ -52,6 +52,7 @@ export default function SkeletonViewer({
   backgroundColor = "#1a1a2e",
   className,
 }: SkeletonViewerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<SkeletonData | null>(null);
   const boundsRef = useRef<{ minX: number; minY: number; maxX: number; maxY: number } | null>(null);
@@ -104,6 +105,7 @@ export default function SkeletonViewer({
 
     const w = canvas.width;
     const h = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
     const frame = data.frames[frameIndex];
     const landmarks = frame.landmarks;
     const pad = 0.1;
@@ -129,8 +131,8 @@ export default function SkeletonViewer({
 
     const points = landmarks.map(toCanvas);
 
-    // Draw connections
-    ctx.lineWidth = 3;
+    // Draw connections (scale line width by DPR)
+    ctx.lineWidth = 3 * dpr;
     ctx.lineCap = "round";
     ctx.strokeStyle = color;
 
@@ -146,7 +148,8 @@ export default function SkeletonViewer({
       ctx.stroke();
     }
 
-    // Draw joints
+    // Draw joints (scale radius by DPR)
+    const jointRadius = 5 * dpr;
     for (let i = 0; i < points.length; i++) {
       const p = points[i];
       if (p.visibility < 0.3) continue;
@@ -155,10 +158,31 @@ export default function SkeletonViewer({
 
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, jointRadius, 0, Math.PI * 2);
       ctx.fill();
     }
   }, [color, backgroundColor]);
+
+  // Resize canvas to match container pixel size
+  useEffect(() => {
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      const dpr = window.devicePixelRatio || 1;
+      const pw = Math.round(width * dpr);
+      const ph = Math.round(height * dpr);
+      if (canvas.width !== pw || canvas.height !== ph) {
+        canvas.width = pw;
+        canvas.height = ph;
+        if (dataRef.current) drawFrame(frameRef.current);
+      }
+    });
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [drawFrame]);
 
   // Animation loop
   const animate = useCallback((timestamp: number) => {
@@ -206,12 +230,11 @@ export default function SkeletonViewer({
   }, [skeletonDataFile, computeBounds, drawFrame, animate]);
 
   return (
-    <div className={className ?? "skeleton-viewer"}>
+    <div ref={containerRef} className={className ?? "skeleton-viewer"}>
       <canvas
         ref={canvasRef}
-        width={300}
-        height={400}
         style={{
+          display: "block",
           width: "100%",
           height: "100%",
           borderRadius: className ? undefined : "var(--radius-lg)",

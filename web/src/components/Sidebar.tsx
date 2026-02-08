@@ -9,18 +9,15 @@ import {
   Users,
   Wrench,
   Settings,
-  MessageCircle,
 } from "lucide-react";
 
 const patientLinks = [
   { href: "/home", label: "Home", icon: Home },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
 const therapistLinks = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/therapist/patients", label: "Patients", icon: Users },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
 ];
 
 export default function Sidebar() {
