@@ -228,7 +228,7 @@ a { color: var(--color-blue); text-decoration: none; }
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-lg);
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-sm) var(--space-xl);
 }
 
 @media (min-width: 768px) {
@@ -580,14 +580,14 @@ a { color: var(--color-blue); text-decoration: none; }
 
 /* ── Layout Utilities ── */
 .page {
-  max-width: 960px;
+  max-width: 1200px;
   padding: var(--space-md) var(--space-md);
   padding-bottom: 100px;
 }
 
 @media (min-width: 768px) {
   .page {
-    padding: var(--space-xl) var(--space-xl);
+    padding: var(--space-md) var(--space-xl);
     padding-bottom: var(--space-xl);
   }
 }
@@ -1051,4 +1051,88 @@ a { color: var(--color-blue); text-decoration: none; }
   background: var(--color-primary-light);
   color: var(--color-primary-dark);
   box-shadow: 0 2px 0 var(--color-primary-dark);
+}
+
+/* ── Exercise Indicators (Patient Cards) ── */
+.exercise-indicators {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* ── Skeleton Viewer ── */
+.skeleton-viewer {
+  width: 100%;
+  aspect-ratio: 3/4;
+  max-height: 280px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 2px solid var(--color-gray-100);
+  background-color: #1a1a2e;
+}
+
+/* Thumbnail variant for exercise cards */
+.skeleton-thumb {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #1a1a2e;
+}
+
+/* ── Exercise Card (Pokemon-style) ── */
+.exercise-card:hover {
+  transform: translateY(-3px);
+}
+.exercise-card:active {
+  transform: translateY(2px);
+  box-shadow: none !important;
+}
+
+/* ── Stepper Button (sets/reps config) ── */
+.stepper-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-gray-100);
+  background: var(--color-white);
+  color: var(--color-gray-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+.stepper-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-surface);
+}
+.stepper-btn:active {
+  transform: scale(0.9);
+}
+
+/* ── Pain Detection Overlay ── */
+.pain-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: var(--space-md) var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  animation: painSlideDown 0.3s var(--ease-out) forwards;
+}
+
+@keyframes painSlideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }

@@ -23,14 +23,6 @@ const SEED_EXERCISES = [
     skeletonDataFile: "ex2_reference.json",
   },
   {
-    name: "Exercise 3",
-    description: "General mobility exercise.",
-    category: "general",
-    defaultSets: 3,
-    defaultReps: 10,
-    defaultHoldSec: 0,
-  },
-  {
     name: "Squat",
     description: "Stand with feet shoulder-width apart. Lower your body by bending your knees.",
     category: "lower body",

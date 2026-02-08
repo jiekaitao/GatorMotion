@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useCallback, use } from "react";
+import { useState, useCallback, useEffect, use } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CameraFeed from "@/components/CameraFeed";
 import CountdownOverlay from "@/components/CountdownOverlay";
+import SkeletonViewer from "@/components/SkeletonViewer";
+import { useExerciseWebSocket } from "@/hooks/useExerciseWebSocket";
 import confetti from "canvas-confetti";
 import {
   X,
@@ -11,8 +13,9 @@ import {
   Dumbbell,
   Info,
   SkipForward,
-  Pause,
   CheckCircle2,
+  AlertTriangle,
+  XOctagon,
 } from "lucide-react";
 
 export default function ExercisePage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,15 +28,47 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const sets = parseInt(searchParams.get("sets") || "3");
   const reps = parseInt(searchParams.get("reps") || "10");
   const holdSec = parseInt(searchParams.get("holdSec") || "0");
+  const exerciseKey = searchParams.get("exerciseKey") || null;
+  const skeletonDataFile = searchParams.get("skeletonDataFile") || null;
 
   const [phase, setPhase] = useState<"ready" | "countdown" | "active" | "done">("ready");
   const [completing, setCompleting] = useState(false);
   const [allDone, setAllDone] = useState(false);
   const [currentRep, setCurrentRep] = useState(0);
 
+  // WebSocket-driven rep counting (only when exerciseKey is set)
+  const {
+    connected: wsConnected,
+    repCount: wsRepCount,
+    formQuality,
+    painLevel,
+    painMessage,
+    startCapture,
+    stopCapture,
+  } = useExerciseWebSocket(phase === "active" ? exerciseKey : null);
+
+  // Sync WebSocket rep count to local state
+  useEffect(() => {
+    if (exerciseKey && wsRepCount > currentRep) {
+      setCurrentRep(wsRepCount);
+    }
+  }, [wsRepCount, exerciseKey, currentRep]);
+
+  // Auto-complete when reps reached
+  useEffect(() => {
+    if (phase === "active" && currentRep >= reps && !completing) {
+      handleComplete();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRep, reps, phase, completing]);
+
   const handleCountdownComplete = useCallback(() => {
     setPhase("active");
   }, []);
+
+  const handleVideoReady = useCallback((video: HTMLVideoElement) => {
+    startCapture(video);
+  }, [startCapture]);
 
   async function handleComplete() {
     setCompleting(true);
@@ -48,21 +83,24 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
 
       if (data.allCompleted) {
         setAllDone(true);
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ["#02caca", "#58CC02", "#FFD700", "#1CB0F6", "#FF9600"],
-        });
       }
 
+      // Always fire confetti on exercise completion
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ["#02caca", "#58CC02", "#FFD700", "#1CB0F6", "#FF9600"],
+      });
+
+      stopCapture();
       setPhase("done");
     } catch {
       setCompleting(false);
     }
   }
 
-  // Simulate rep counting (in real app this would come from pose detection)
+  // Manual rep increment (fallback when no exerciseKey)
   function simulateRep() {
     if (currentRep < reps) {
       setCurrentRep((prev) => prev + 1);
@@ -72,7 +110,16 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   const totalReps = reps;
   const progressPct = totalReps > 0 ? (currentRep / totalReps) * 100 : 0;
 
-  // Done state — full screen celebration
+  // Form quality badge
+  const formBadge = exerciseKey
+    ? formQuality === "good"
+      ? { label: "Good Form!", sublabel: "Keep going", color: "var(--color-green)", icon: <CheckCircle2 size={16} color="white" /> }
+      : formQuality === "warning"
+      ? { label: "Check Form", sublabel: "Adjust position", color: "var(--color-orange)", icon: <AlertTriangle size={16} color="white" /> }
+      : null
+    : { label: "Good Form!", sublabel: "Keep going", color: "var(--color-green)", icon: <CheckCircle2 size={16} color="white" /> };
+
+  // Done state
   if (phase === "done") {
     return (
       <div
@@ -114,10 +161,22 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         <CountdownOverlay onComplete={handleCountdownComplete} />
       )}
 
-      {/* ── Session Header ── */}
+      {/* Pain detection overlay */}
+      {phase === "active" && painLevel !== "normal" && (
+        <div className="pain-overlay" style={{
+          backgroundColor: painLevel === "stop" ? "var(--color-red)" : "var(--color-orange)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+            {painLevel === "stop" ? <XOctagon size={24} color="white" /> : <AlertTriangle size={24} color="white" />}
+            <span style={{ color: "white", fontWeight: 700, fontSize: "16px" }}>{painMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Session Header */}
       <header className="session-header">
         <button
-          onClick={() => router.push("/home")}
+          onClick={() => { stopCapture(); router.push("/home"); }}
           style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-gray-300)", padding: 4 }}
         >
           <X size={28} />
@@ -130,22 +189,25 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           </div>
         </div>
 
-        {/* Streak indicator */}
+        {/* Rep counter */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--color-primary)", fontWeight: 700 }}>
           <Flame size={20} color="var(--color-orange)" fill="var(--color-orange)" />
           <span>{currentRep}</span>
         </div>
       </header>
 
-      {/* ── Main Session Layout ── */}
+      {/* Main Session Layout */}
       <div className="session-layout">
         {/* Camera Feed */}
         <div className="session-camera">
           <div style={{ width: "100%", height: "100%", position: "relative", borderRadius: "var(--radius-xl)", overflow: "hidden", border: "4px solid var(--color-white)", boxShadow: "0 4px 24px rgba(0,0,0,0.08)" }}>
-            <CameraFeed active={phase === "active" || phase === "countdown"} />
+            <CameraFeed
+              active={phase === "active" || phase === "countdown"}
+              onVideoReady={handleVideoReady}
+            />
 
             {/* Form Feedback Badge */}
-            {phase === "active" && (
+            {phase === "active" && formBadge && (
               <div
                 className="animate-bounce-gentle"
                 style={{
@@ -168,18 +230,35 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
                     width: 28,
                     height: 28,
                     borderRadius: "var(--radius-full)",
-                    backgroundColor: "var(--color-green)",
+                    backgroundColor: formBadge.color,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <CheckCircle2 size={16} color="white" />
+                  {formBadge.icon}
                 </div>
                 <div>
-                  <p style={{ fontWeight: 700, color: "var(--color-green)", fontSize: "16px", lineHeight: 1 }}>Good Form!</p>
-                  <p style={{ color: "var(--color-gray-300)", fontSize: "11px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>Keep going</p>
+                  <p style={{ fontWeight: 700, color: formBadge.color, fontSize: "16px", lineHeight: 1 }}>{formBadge.label}</p>
+                  <p style={{ color: "var(--color-gray-300)", fontSize: "11px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" }}>{formBadge.sublabel}</p>
                 </div>
+              </div>
+            )}
+
+            {/* WebSocket connection indicator */}
+            {phase === "active" && exerciseKey && (
+              <div style={{
+                position: "absolute",
+                bottom: "var(--space-sm)",
+                right: "var(--space-sm)",
+                padding: "4px 8px",
+                borderRadius: "var(--radius-sm)",
+                backgroundColor: wsConnected ? "rgba(88,204,2,0.8)" : "rgba(234,43,43,0.8)",
+                color: "white",
+                fontSize: "11px",
+                fontWeight: 700,
+              }}>
+                {wsConnected ? "CV Connected" : "CV Offline"}
               </div>
             )}
           </div>
@@ -194,6 +273,15 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
             </span>
             <h1 style={{ fontSize: "var(--text-display)", fontWeight: 800, letterSpacing: "-0.02em", marginTop: 4 }}>{name}</h1>
           </div>
+
+          {/* Skeleton Reference Viewer */}
+          {skeletonDataFile && (
+            <SkeletonViewer
+              skeletonDataFile={skeletonDataFile}
+              playing={phase === "active"}
+              mirror
+            />
+          )}
 
           {/* Rep Counter Card */}
           <div
@@ -295,6 +383,7 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
 
             {phase === "active" && (
               <>
+                {/* Manual fallback button - always shown, but labeled differently */}
                 <button
                   className="btn btn-secondary"
                   style={{ height: 56, borderRadius: "var(--radius-xl)" }}

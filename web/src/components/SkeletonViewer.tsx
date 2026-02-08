@@ -40,6 +40,7 @@ interface SkeletonViewerProps {
   mirror?: boolean;
   color?: string;
   backgroundColor?: string;
+  className?: string;
 }
 
 export default function SkeletonViewer({
@@ -49,6 +50,7 @@ export default function SkeletonViewer({
   mirror = false,
   color = "#02caca",
   backgroundColor = "#1a1a2e",
+  className,
 }: SkeletonViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dataRef = useRef<SkeletonData | null>(null);
@@ -204,7 +206,7 @@ export default function SkeletonViewer({
   }, [skeletonDataFile, computeBounds, drawFrame, animate]);
 
   return (
-    <div className="skeleton-viewer">
+    <div className={className ?? "skeleton-viewer"}>
       <canvas
         ref={canvasRef}
         width={300}
@@ -212,7 +214,7 @@ export default function SkeletonViewer({
         style={{
           width: "100%",
           height: "100%",
-          borderRadius: "var(--radius-lg)",
+          borderRadius: className ? undefined : "var(--radius-lg)",
         }}
       />
     </div>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { findUserById, getTodayAssignment } from "@/lib/db-helpers";
+import { findUserById, getTodayAssignment, getUserAssignments } from "@/lib/db-helpers";
 
 export async function GET(
   _req: NextRequest,
@@ -23,6 +23,7 @@ export async function GET(
   }
 
   const todayAssignment = await getTodayAssignment(id);
+  const assignmentHistory = await getUserAssignments(id);
 
   return NextResponse.json({
     patient: {
@@ -33,5 +34,11 @@ export async function GET(
       createdAt: patient.createdAt,
     },
     todayAssignment,
+    history: assignmentHistory.map((a) => ({
+      _id: a._id.toString(),
+      date: a.date,
+      exercises: a.exercises,
+      allCompleted: a.allCompleted,
+    })),
   });
 }

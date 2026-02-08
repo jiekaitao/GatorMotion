@@ -25,6 +25,8 @@ interface Exercise {
   reps: number;
   holdSec: number;
   completed: boolean;
+  exerciseKey?: string;
+  skeletonDataFile?: string;
 }
 
 interface Assignment {
@@ -434,11 +436,12 @@ export default function HomePage() {
                       key={ex.exerciseId}
                       className="animate-in"
                       style={{ animationDelay: `${i * 60}ms`, position: "relative", cursor: "pointer" }}
-                      onClick={() =>
-                        router.push(
-                          `/exercise/${assignment!._id}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`
-                        )
-                      }
+                      onClick={() => {
+                        let url = `/exercise/${assignment!._id}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`;
+                        if (ex.exerciseKey) url += `&exerciseKey=${ex.exerciseKey}`;
+                        if (ex.skeletonDataFile) url += `&skeletonDataFile=${ex.skeletonDataFile}`;
+                        router.push(url);
+                      }}
                     >
                       {/* Pulse glow */}
                       <div
@@ -710,9 +713,10 @@ export default function HomePage() {
             style={{ fontSize: "18px", fontWeight: 800 }}
             onClick={() => {
               const ex = exercises[nextExerciseIndex];
-              router.push(
-                `/exercise/${assignment!._id}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`
-              );
+              let url = `/exercise/${assignment!._id}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`;
+              if (ex.exerciseKey) url += `&exerciseKey=${ex.exerciseKey}`;
+              if (ex.skeletonDataFile) url += `&skeletonDataFile=${ex.skeletonDataFile}`;
+              router.push(url);
             }}
           >
             <Play size={22} fill="white" />
