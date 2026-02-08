@@ -1,10 +1,6 @@
 import { MongoClient, Db } from "mongodb";
 
-const MONGODB_URI = process.env.MONGODB_URI!;
-
-if (!MONGODB_URI) {
-  throw new Error("MONGODB_URI is not defined in environment variables");
-}
+let cachedMongoUri: string | null = null;
 
 interface MongoCache {
   client: MongoClient | null;
@@ -21,11 +17,23 @@ if (!globalWithMongo._mongoCache) {
 
 const cache = globalWithMongo._mongoCache;
 
+function getMongoUri(): string {
+  if (cachedMongoUri) return cachedMongoUri;
+
+  const mongoUri = process.env.MONGODB_URI;
+  if (!mongoUri) {
+    throw new Error("MONGODB_URI is not defined in environment variables");
+  }
+
+  cachedMongoUri = mongoUri;
+  return cachedMongoUri;
+}
+
 export async function getClient(): Promise<MongoClient> {
   if (cache.client) return cache.client;
 
   if (!cache.promise) {
-    cache.promise = MongoClient.connect(MONGODB_URI);
+    cache.promise = MongoClient.connect(getMongoUri());
   }
 
   cache.client = await cache.promise;
