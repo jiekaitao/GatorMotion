@@ -8,9 +8,7 @@ import json
 import urllib.request
 from pathlib import Path
 
-EXERCISE_URLS = {
-    "squat": "https://raw.githubusercontent.com/jiekaitao/GatorMotion/main/skeleton_data/ex6_reference.json",
-}
+from pt_coach.exercises import available_exercises, exercise_download_url, get_exercise_spec
 
 
 def download_file(url: str, dst: Path) -> None:
@@ -35,27 +33,35 @@ if __name__ == "__main__":
     parser.add_argument(
         "--exercise",
         default="squat",
-        choices=sorted(EXERCISE_URLS.keys()),
-        help="Exercise to download",
+        choices=available_exercises() + ["all"],
+        help="Exercise to download, or 'all'",
     )
     parser.add_argument(
         "--output",
-        default="data/raw/squat_reference.json",
-        help="Output path for downloaded landmark data",
+        default="",
+        help="Output path for downloaded landmark data (only used when --exercise is a single exercise)",
     )
     parser.add_argument("--force", action="store_true", help="Overwrite existing file")
     args = parser.parse_args()
 
-    out_path = Path(args.output)
-    if out_path.exists() and not args.force:
-        print(f"Already exists: {out_path}")
-        print("Use --force to overwrite.")
-    else:
-        url = EXERCISE_URLS[args.exercise]
-        print(f"Downloading {args.exercise} reference from:\n  {url}")
-        download_file(url, out_path)
-        validate_reference_json(out_path)
-        print(f"Saved: {out_path}")
+    keys = available_exercises() if args.exercise == "all" else [args.exercise]
 
-    validate_reference_json(out_path)
-    print("Reference file validated.")
+    for key in keys:
+        spec = get_exercise_spec(key)
+        if args.output and args.exercise != "all":
+            out_path = Path(args.output)
+        else:
+            out_path = Path(f"data/raw/{spec.key}_reference.json")
+
+        if out_path.exists() and not args.force:
+            print(f"Already exists: {out_path}")
+            print("Use --force to overwrite.")
+        else:
+            url = exercise_download_url(spec)
+            print(f"Downloading {spec.key} reference from:\n  {url}")
+            download_file(url, out_path)
+            validate_reference_json(out_path)
+            print(f"Saved: {out_path}")
+
+        validate_reference_json(out_path)
+        print(f"{spec.key} reference file validated.")

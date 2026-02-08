@@ -15,7 +15,12 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import BaseOptions
-from mediapipe.tasks.python.vision import PoseLandmarker, PoseLandmarkerOptions, RunningMode
+from mediapipe.tasks.python.vision import (
+    PoseLandmarker,
+    PoseLandmarkerOptions,
+    PoseLandmarksConnections,
+    RunningMode,
+)
 
 from pt_coach.common import (
     LANDMARK_INDEX,
@@ -27,6 +32,11 @@ from pt_coach.common import (
     moving_average,
     normalize_to_body_frame,
 )
+from pt_coach.exercises import available_exercises, get_exercise_spec
+
+POSE_CONNECTIONS = [
+    (int(conn.start), int(conn.end)) for conn in PoseLandmarksConnections.POSE_LANDMARKS
+]
 
 
 class PTCoachEngine:
@@ -51,6 +61,8 @@ class PTCoachEngine:
         self.last_spoken_message = ""
         self.last_message_ts_ms = 0
         self.active_corrections: dict[str, bool] = {}
+        self.activate_streak: dict[str, int] = {}
+        self.clear_streak: dict[str, int] = {}
         self.overlay_state: dict[str, dict[str, np.ndarray]] = {}
 
         # Stricter anti-pedantic hysteresis:
@@ -66,13 +78,74 @@ class PTCoachEngine:
         self.overlay_alpha_cur = 0.72
         self.overlay_alpha_tgt = 0.82
 
+        # Temporal phase alignment: compare user's recent motion window to all
+        # possible reference windows and pick best matching phase.
+        self.align_window_ms = 1000
+        self.align_len = int(min(15, max(6, self.ref_features_scaled.shape[0] // 10)))
+        self.user_feature_hist: deque[tuple[int, np.ndarray]] = deque(maxlen=240)
+        self.ref_windows = self._build_ref_windows(self.align_len)
+        self.ref_idx_ema: float | None = None
+
     def _scale_feature(self, feat: np.ndarray) -> np.ndarray:
         return (feat - self.feat_mean) / self.feat_std
 
-    def _match_reference_index(self, feat_scaled: np.ndarray) -> tuple[int, float]:
+    def _build_ref_windows(self, win_len: int) -> np.ndarray:
+        n = self.ref_features_scaled.shape[0]
+        if n <= win_len:
+            return self.ref_features_scaled[None, :, :]
+        return np.stack([self.ref_features_scaled[i : i + win_len] for i in range(n - win_len + 1)], axis=0)
+
+    def _resample_sequence(self, seq: np.ndarray, out_len: int) -> np.ndarray:
+        if seq.shape[0] == out_len:
+            return seq
+        if seq.shape[0] <= 1:
+            return np.repeat(seq[:1], out_len, axis=0)
+
+        src_idx = np.linspace(0, seq.shape[0] - 1, out_len)
+        left = np.floor(src_idx).astype(np.int32)
+        right = np.ceil(src_idx).astype(np.int32)
+        alpha = (src_idx - left).astype(np.float32)[:, None]
+        return (1.0 - alpha) * seq[left] + alpha * seq[right]
+
+    def _single_frame_match(self, feat_scaled: np.ndarray) -> tuple[int, float]:
         d = np.linalg.norm(self.ref_features_scaled - feat_scaled[None, :], axis=1)
         idx = int(np.argmin(d))
         return idx, float(d[idx])
+
+    def _temporal_match_reference(self, ts_ms: int, feat_scaled: np.ndarray) -> tuple[int, float]:
+        self.user_feature_hist.append((int(ts_ms), feat_scaled.astype(np.float32)))
+        cutoff = ts_ms - self.align_window_ms
+        recent = [f for t, f in self.user_feature_hist if t >= cutoff]
+
+        if len(recent) < 4:
+            return self._single_frame_match(feat_scaled)
+
+        user_seq = np.stack(recent, axis=0).astype(np.float32)
+        user_seq = self._resample_sequence(user_seq, self.align_len)
+
+        # Mean squared error over all candidate windows.
+        diff = self.ref_windows - user_seq[None, :, :]
+        mse = np.mean(diff * diff, axis=(1, 2))
+
+        # Small continuity bias to avoid phase flicker frame-to-frame.
+        if self.ref_idx_ema is not None and self.ref_windows.shape[0] > 1:
+            starts = np.arange(self.ref_windows.shape[0], dtype=np.float32)
+            end_idxs = starts + (self.align_len - 1)
+            continuity = np.abs(end_idxs - self.ref_idx_ema)
+            mse = mse + (0.0008 * continuity)
+
+        best_start = int(np.argmin(mse))
+        matched_idx = int(min(best_start + self.align_len - 1, self.ref_features_scaled.shape[0] - 1))
+
+        if self.ref_idx_ema is None:
+            self.ref_idx_ema = float(matched_idx)
+        else:
+            self.ref_idx_ema = (0.8 * self.ref_idx_ema) + (0.2 * matched_idx)
+
+        matched_idx = int(round(self.ref_idx_ema))
+        matched_idx = max(0, min(matched_idx, self.ref_features_scaled.shape[0] - 1))
+        frame_dist = float(np.linalg.norm(self.ref_features_scaled[matched_idx] - feat_scaled))
+        return matched_idx, frame_dist
 
     def _quality_from_distance(self, d: float) -> float:
         p50 = float(self.dist_cal["p50"])
@@ -160,7 +233,8 @@ class PTCoachEngine:
         norm, frame_info = normalize_to_body_frame(landmarks_xyzw)
         feat = feature_vector(norm, self.feature_landmarks)
         feat_scaled = self._scale_feature(feat)
-        ref_idx, dist = self._match_reference_index(feat_scaled)
+        ref_idx, temporal_dist = self._temporal_match_reference(ts_ms, feat_scaled)
+        _, dist = self._single_frame_match(feat_scaled)
 
         quality = self._quality_from_distance(dist)
         self.quality_hist.append(quality)
@@ -200,10 +274,29 @@ class PTCoachEngine:
                 err_ratio <= self.clear_ratio
                 or (abs(dx) <= self.clear_abs_dx and abs(dy) <= self.clear_abs_dy)
             )
-            is_active = (was_active and not should_clear) or (not was_active and should_activate)
+
+            if should_activate:
+                self.activate_streak[correction_id] = self.activate_streak.get(correction_id, 0) + 1
+            else:
+                self.activate_streak[correction_id] = 0
+
+            if should_clear:
+                self.clear_streak[correction_id] = self.clear_streak.get(correction_id, 0) + 1
+            else:
+                self.clear_streak[correction_id] = 0
+
+            if was_active:
+                is_active = self.clear_streak[correction_id] < 2
+            else:
+                is_active = self.activate_streak[correction_id] >= 3
             self.active_corrections[correction_id] = is_active
 
             if not is_active:
+                continue
+
+            # If overall pose already matches the reference very well,
+            # suppress medium-ish residual deltas to avoid pedantic coaching.
+            if quality_smooth > 0.96 and err_ratio < 3.0:
                 continue
             active_ids_now.add(correction_id)
 
@@ -289,9 +382,16 @@ class PTCoachEngine:
             "ts_ms": int(ts_ms),
             "exercise": {
                 "name": self.meta.get("exercise_name", "squat"),
+                "display_name": self.meta.get("exercise_display_name", self.meta.get("exercise_name", "squat")),
                 "phase": self._phase(ref_idx),
                 "rep": int(self.rep_count),
                 "reference_frame": int(ref_idx),
+            },
+            "alignment": {
+                "method": "temporal_window_mse",
+                "window_ms": int(self.align_window_ms),
+                "window_samples": int(self.align_len),
+                "temporal_distance": round(float(temporal_dist), 4),
             },
             "quality": {
                 "score": round(float(quality_smooth), 3),
@@ -334,6 +434,103 @@ class Replayer:
         frame = self.frames[self.i % len(self.frames)]
         self.i += 1
         return landmarks_list_to_np(frame["landmarks"])
+
+
+class ReferenceDemoLoop:
+    def __init__(self, reference_json: Path):
+        data = load_reference_json(reference_json)
+        self.fps = float(data.get("fps", 15.0))
+        self.frames = [landmarks_list_to_np(f["landmarks"]) for f in data.get("frames", [])]
+        self.start_ts_ms: int | None = None
+
+    def frame_at(self, ts_ms: int) -> tuple[np.ndarray | None, int]:
+        if not self.frames:
+            return None, -1
+        if self.start_ts_ms is None:
+            self.start_ts_ms = int(ts_ms)
+        elapsed_s = max(0.0, (ts_ms - self.start_ts_ms) / 1000.0)
+        idx = int((elapsed_s * self.fps) % len(self.frames))
+        return self.frames[idx], idx
+
+
+def _project_landmarks_to_box(
+    landmarks_xyzw: np.ndarray, x0: int, y0: int, bw: int, bh: int
+) -> tuple[list[tuple[int, int]], np.ndarray]:
+    vis = landmarks_xyzw[:, 3] > 0.2
+    coords = landmarks_xyzw[:, :2]
+    if np.sum(vis) < 4:
+        vis = np.ones((coords.shape[0],), dtype=bool)
+
+    valid = coords[vis]
+    min_xy = valid.min(axis=0)
+    max_xy = valid.max(axis=0)
+    center = (min_xy + max_xy) * 0.5
+    span = float(max(max_xy[0] - min_xy[0], max_xy[1] - min_xy[1], 0.25))
+
+    out_pts: list[tuple[int, int]] = []
+    for i in range(coords.shape[0]):
+        rel = (coords[i] - center) / span
+        px = int(x0 + (0.5 + 0.85 * rel[0]) * bw)
+        py = int(y0 + (0.5 + 0.85 * rel[1]) * bh)
+        out_pts.append((px, py))
+    return out_pts, vis
+
+
+def draw_demo_wireframe_loop(
+    frame: np.ndarray,
+    demo_landmarks: np.ndarray | None,
+    loop_idx: int,
+    title: str,
+    box_w: int = 250,
+    box_h: int = 250,
+) -> None:
+    if demo_landmarks is None:
+        return
+
+    h, w = frame.shape[:2]
+    x0 = max(10, w - box_w - 10)
+    y0 = 10
+    x1 = x0 + box_w
+    y1 = y0 + box_h
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x0, y0), (x1, y1), (28, 28, 34), -1)
+    cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+    cv2.rectangle(frame, (x0, y0), (x1, y1), (90, 120, 200), 1)
+
+    pts, vis = _project_landmarks_to_box(demo_landmarks, x0, y0, box_w, box_h)
+    for a, b in POSE_CONNECTIONS:
+        if a >= len(pts) or b >= len(pts):
+            continue
+        if not (vis[a] and vis[b]):
+            continue
+        cv2.line(frame, pts[a], pts[b], (90, 220, 255), 1, cv2.LINE_AA)
+
+    for i, p in enumerate(pts):
+        if i < len(vis) and not vis[i]:
+            continue
+        cv2.circle(frame, p, 2, (220, 255, 255), -1)
+
+    cv2.putText(
+        frame,
+        f"Demo Loop: {title}",
+        (x0 + 8, y0 + 18),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.5,
+        (230, 240, 255),
+        1,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        f"frame {loop_idx}",
+        (x0 + 8, y1 - 8),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.45,
+        (170, 180, 195),
+        1,
+        cv2.LINE_AA,
+    )
 
 
 def draw_pose_points(frame: np.ndarray, landmarks_xyzw: np.ndarray, color=(40, 255, 120)) -> None:
@@ -406,12 +603,20 @@ def render_panel(frame: np.ndarray, payload: dict[str, Any], width: int = 410) -
         cv2.putText(panel, text, (14, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness, cv2.LINE_AA)
         y += line_h
 
-    write_line("PT Coach Demo (Squat)", color=(120, 230, 255), scale=0.72, thickness=2)
+    exercise_name = payload.get("exercise", {}).get("display_name", payload.get("exercise", {}).get("name", "exercise"))
+    write_line(f"PT Coach Demo ({exercise_name})", color=(120, 230, 255), scale=0.72, thickness=2)
     write_line(f"Rep: {payload['exercise']['rep']}    Phase: {payload['exercise']['phase']}")
     write_line(
         f"Quality: {payload['quality']['score']:.2f}    Conf: {payload['quality']['confidence']:.2f}",
         color=(180, 255, 180),
     )
+    align = payload.get("alignment", {})
+    if align:
+        write_line(
+            f"Align: {align.get('method', '')} ({align.get('window_ms', 0)}ms/{align.get('window_samples', 0)}pts)",
+            color=(145, 160, 180),
+            scale=0.5,
+        )
 
     y += 8
     cv2.line(panel, (12, y), (width - 12, y), (70, 70, 75), 1)
@@ -524,20 +729,37 @@ def ensure_parent(path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Live PT coach demo")
-    parser.add_argument("--model", default="models/squat_reference_model.npz")
-    parser.add_argument("--metadata", default="models/squat_reference_model.meta.json")
+    parser.add_argument("--exercise", default="squat", choices=available_exercises())
+    parser.add_argument("--model", default="", help="Model .npz path (defaults to models/<exercise>_reference_model.npz)")
+    parser.add_argument(
+        "--metadata",
+        default="",
+        help="Model metadata path (defaults to models/<exercise>_reference_model.meta.json)",
+    )
+    parser.add_argument(
+        "--reference-json",
+        default="",
+        help="Reference landmark JSON for demo wireframe loop (defaults to data/raw/<exercise>_reference.json)",
+    )
     parser.add_argument("--pose-model", default="models/pose_landmarker_heavy.task")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--mirror", action="store_true", help="Mirror display preview")
     parser.add_argument("--json-out", default="outputs/live_state.json")
     parser.add_argument("--source-json", default="", help="Replay landmark JSON instead of webcam")
     parser.add_argument("--no-window", action="store_true", help="Disable OpenCV UI window")
+    parser.add_argument("--no-demo-loop", action="store_true", help="Disable looped reference wireframe overlay")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0=run forever)")
     parser.add_argument("--print-every", type=int, default=10, help="Console print cadence in frames")
     args = parser.parse_args()
 
-    model_path = Path(args.model)
-    metadata_path = Path(args.metadata)
+    spec = get_exercise_spec(args.exercise)
+    model_path = Path(args.model) if args.model else Path(f"models/{spec.key}_reference_model.npz")
+    metadata_path = (
+        Path(args.metadata) if args.metadata else Path(f"models/{spec.key}_reference_model.meta.json")
+    )
+    reference_json_path = (
+        Path(args.reference_json) if args.reference_json else Path(f"data/raw/{spec.key}_reference.json")
+    )
     pose_model_path = Path(args.pose_model)
     json_out_path = Path(args.json_out)
 
@@ -554,6 +776,15 @@ def main() -> None:
     cap = None
     landmarker = None
     replayer = None
+    demo_loop = None
+
+    if not args.no_demo_loop:
+        demo_source = Path(args.source_json) if args.source_json else reference_json_path
+        if demo_source.exists():
+            demo_loop = ReferenceDemoLoop(demo_source)
+            print(f"Demo loop source: {demo_source}")
+        else:
+            print(f"Demo loop source not found, skipping overlay: {demo_source}")
 
     if args.source_json:
         replayer = Replayer(Path(args.source_json))
@@ -599,7 +830,17 @@ def main() -> None:
             if landmarks_xyzw is None:
                 payload = {
                     "ts_ms": ts_ms,
-                    "exercise": {"name": "squat", "phase": "setup", "rep": 0},
+                    "exercise": {
+                        "name": spec.key,
+                        "display_name": spec.display_name,
+                        "phase": "setup",
+                        "rep": 0,
+                    },
+                    "alignment": {
+                        "method": "temporal_window_mse",
+                        "window_ms": int(engine.align_window_ms),
+                        "window_samples": int(engine.align_len),
+                    },
                     "quality": {"score": 0.0, "confidence": 0.0},
                     "measurements": {
                         "left_knee_angle_deg": 0.0,
@@ -630,6 +871,9 @@ def main() -> None:
                 )
 
             if not args.no_window:
+                if demo_loop is not None:
+                    demo_lms, demo_idx = demo_loop.frame_at(ts_ms)
+                    draw_demo_wireframe_loop(frame, demo_lms, demo_idx, payload["exercise"].get("display_name", spec.display_name))
                 draw_correction_overlays(frame, payload)
                 if args.mirror:
                     frame = cv2.flip(frame, 1)

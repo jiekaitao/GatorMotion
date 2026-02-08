@@ -10,16 +10,17 @@ from pathlib import Path
 import numpy as np
 
 from pt_coach.common import (
-    CORRECTION_LANDMARKS,
     FEATURE_LANDMARKS,
     PART_BY_INDEX,
     SIDE_BY_INDEX,
+    correction_landmarks_for_exercise,
     feature_vector,
     knee_angles_deg,
     landmarks_list_to_np,
     load_reference_json,
     normalize_to_body_frame,
 )
+from pt_coach.exercises import available_exercises, get_exercise_spec
 
 
 def pairwise_distances(x: np.ndarray) -> np.ndarray:
@@ -36,9 +37,11 @@ def robust_std(a: np.ndarray, eps: float = 1e-6) -> np.ndarray:
     return np.where(std < eps, 1.0, std)
 
 
-def train(reference_json: Path, model_out: Path, metadata_out: Path) -> None:
+def train(exercise_key: str, reference_json: Path, model_out: Path, metadata_out: Path) -> None:
     data = load_reference_json(reference_json)
     frames = data["frames"]
+    spec = get_exercise_spec(exercise_key)
+    correction_landmarks = correction_landmarks_for_exercise(spec.key)
 
     lm_all = []
     features = []
@@ -75,7 +78,7 @@ def train(reference_json: Path, model_out: Path, metadata_out: Path) -> None:
     # Tolerances for correction deltas from local frame-to-frame motion.
     tol = {}
     diffs = np.abs(np.diff(ref_norm, axis=0))  # (N-1,33,3)
-    for idx in CORRECTION_LANDMARKS:
+    for idx in correction_landmarks:
         tol_x = float(np.percentile(diffs[:, idx, 0], 90) * 2.0 + 0.03)
         tol_y = float(np.percentile(diffs[:, idx, 1], 90) * 2.0 + 0.04)
         tol[idx] = {
@@ -86,11 +89,13 @@ def train(reference_json: Path, model_out: Path, metadata_out: Path) -> None:
         }
 
     metadata = {
-        "exercise_name": "squat",
+        "exercise_name": spec.key,
+        "exercise_display_name": spec.display_name,
+        "exercise_code": spec.code,
         "exercise_source": str(reference_json),
         "reference_frames": int(ref_norm.shape[0]),
         "feature_landmarks": FEATURE_LANDMARKS,
-        "correction_landmarks": CORRECTION_LANDMARKS,
+        "correction_landmarks": correction_landmarks,
         "distance_calibration": {
             "p50": dist_p50,
             "p90": dist_p90,
@@ -127,20 +132,35 @@ def train(reference_json: Path, model_out: Path, metadata_out: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train PT coach reference model")
     parser.add_argument(
+        "--exercise",
+        default="squat",
+        choices=available_exercises(),
+        help="Exercise key",
+    )
+    parser.add_argument(
         "--reference-json",
-        default="data/raw/squat_reference.json",
+        default="",
         help="Path to downloaded reference landmark JSON",
     )
     parser.add_argument(
         "--model-out",
-        default="models/squat_reference_model.npz",
+        default="",
         help="Output path for trained model arrays",
     )
     parser.add_argument(
         "--metadata-out",
-        default="models/squat_reference_model.meta.json",
+        default="",
         help="Output path for model metadata",
     )
     args = parser.parse_args()
 
-    train(Path(args.reference_json), Path(args.model_out), Path(args.metadata_out))
+    spec = get_exercise_spec(args.exercise)
+    reference_json = Path(args.reference_json) if args.reference_json else Path(f"data/raw/{spec.key}_reference.json")
+    model_out = Path(args.model_out) if args.model_out else Path(f"models/{spec.key}_reference_model.npz")
+    metadata_out = (
+        Path(args.metadata_out)
+        if args.metadata_out
+        else Path(f"models/{spec.key}_reference_model.meta.json")
+    )
+
+    train(spec.key, reference_json, model_out, metadata_out)

@@ -13,6 +13,10 @@ LANDMARK_INDEX = {
     "nose": 0,
     "left_shoulder": 11,
     "right_shoulder": 12,
+    "left_elbow": 13,
+    "right_elbow": 14,
+    "left_wrist": 15,
+    "right_wrist": 16,
     "left_hip": 23,
     "right_hip": 24,
     "left_knee": 25,
@@ -26,6 +30,10 @@ LANDMARK_INDEX = {
 FEATURE_LANDMARKS = [
     LANDMARK_INDEX["left_shoulder"],
     LANDMARK_INDEX["right_shoulder"],
+    LANDMARK_INDEX["left_elbow"],
+    LANDMARK_INDEX["right_elbow"],
+    LANDMARK_INDEX["left_wrist"],
+    LANDMARK_INDEX["right_wrist"],
     LANDMARK_INDEX["left_hip"],
     LANDMARK_INDEX["right_hip"],
     LANDMARK_INDEX["left_knee"],
@@ -46,6 +54,14 @@ CORRECTION_LANDMARKS = [
 ]
 
 SIDE_BY_INDEX = {
+    LANDMARK_INDEX["left_shoulder"]: "left",
+    LANDMARK_INDEX["right_shoulder"]: "right",
+    LANDMARK_INDEX["left_elbow"]: "left",
+    LANDMARK_INDEX["right_elbow"]: "right",
+    LANDMARK_INDEX["left_wrist"]: "left",
+    LANDMARK_INDEX["right_wrist"]: "right",
+    LANDMARK_INDEX["left_hip"]: "left",
+    LANDMARK_INDEX["right_hip"]: "right",
     LANDMARK_INDEX["left_knee"]: "left",
     LANDMARK_INDEX["right_knee"]: "right",
     LANDMARK_INDEX["left_ankle"]: "left",
@@ -55,12 +71,58 @@ SIDE_BY_INDEX = {
 }
 
 PART_BY_INDEX = {
+    LANDMARK_INDEX["left_shoulder"]: "shoulder",
+    LANDMARK_INDEX["right_shoulder"]: "shoulder",
+    LANDMARK_INDEX["left_elbow"]: "elbow",
+    LANDMARK_INDEX["right_elbow"]: "elbow",
+    LANDMARK_INDEX["left_wrist"]: "wrist",
+    LANDMARK_INDEX["right_wrist"]: "wrist",
+    LANDMARK_INDEX["left_hip"]: "hip",
+    LANDMARK_INDEX["right_hip"]: "hip",
     LANDMARK_INDEX["left_knee"]: "knee",
     LANDMARK_INDEX["right_knee"]: "knee",
     LANDMARK_INDEX["left_ankle"]: "ankle",
     LANDMARK_INDEX["right_ankle"]: "ankle",
     LANDMARK_INDEX["left_foot_index"]: "foot",
     LANDMARK_INDEX["right_foot_index"]: "foot",
+}
+
+
+EXERCISE_CORRECTION_LANDMARKS = {
+    "arm_abduction": [
+        LANDMARK_INDEX["left_shoulder"],
+        LANDMARK_INDEX["right_shoulder"],
+        LANDMARK_INDEX["left_elbow"],
+        LANDMARK_INDEX["right_elbow"],
+        LANDMARK_INDEX["left_wrist"],
+        LANDMARK_INDEX["right_wrist"],
+    ],
+    "arm_vw": [
+        LANDMARK_INDEX["left_shoulder"],
+        LANDMARK_INDEX["right_shoulder"],
+        LANDMARK_INDEX["left_elbow"],
+        LANDMARK_INDEX["right_elbow"],
+        LANDMARK_INDEX["left_wrist"],
+        LANDMARK_INDEX["right_wrist"],
+    ],
+    "leg_abduction": [
+        LANDMARK_INDEX["left_hip"],
+        LANDMARK_INDEX["right_hip"],
+        LANDMARK_INDEX["left_knee"],
+        LANDMARK_INDEX["right_knee"],
+        LANDMARK_INDEX["left_ankle"],
+        LANDMARK_INDEX["right_ankle"],
+        LANDMARK_INDEX["left_foot_index"],
+        LANDMARK_INDEX["right_foot_index"],
+    ],
+    "squat": [
+        LANDMARK_INDEX["left_knee"],
+        LANDMARK_INDEX["right_knee"],
+        LANDMARK_INDEX["left_ankle"],
+        LANDMARK_INDEX["right_ankle"],
+        LANDMARK_INDEX["left_foot_index"],
+        LANDMARK_INDEX["right_foot_index"],
+    ],
 }
 
 
@@ -190,3 +252,7 @@ def moving_average(data: list[float], window: int) -> float:
         return float(data[-1])
     arr = np.array(data[-window:], dtype=np.float32)
     return float(arr.mean())
+
+
+def correction_landmarks_for_exercise(exercise_key: str) -> list[int]:
+    return list(EXERCISE_CORRECTION_LANDMARKS.get(exercise_key, CORRECTION_LANDMARKS))
