@@ -16,7 +16,7 @@ import mediapipe as mp
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from rep_counter import RepCounter, PainDetector
+from rep_counter import RepCounter, PainDetector, SixSevenDetector
 
 from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python.vision import (
@@ -234,6 +234,7 @@ async def ws_exercise(websocket: WebSocket):
 
     rep_counter = RepCounter(exercise_key)
     pain_detector = PainDetector()
+    six_seven_detector = SixSevenDetector()
 
     await websocket.accept()
     try:
@@ -299,10 +300,16 @@ async def ws_exercise(websocket: WebSocket):
                 result = pain_detector.update(flm_objects, w, h)
                 pain_status = {"level": result[0], "message": result[1], "ear": round(result[2], 4), "mar": round(result[3], 4)}
 
+            # 6-7 Easter egg detection from pose wrist landmarks
+            six_seven_status = {"triggered": False}
+            if tracking["pose"] and len(tracking["pose"]) > 0:
+                six_seven_status = six_seven_detector.update(lm_objects, w, h)
+
             response = {
                 **tracking,
                 "exercise": exercise_status,
                 "pain": pain_status,
+                "six_seven": six_seven_status,
             }
             await websocket.send_json(response)
     except WebSocketDisconnect:

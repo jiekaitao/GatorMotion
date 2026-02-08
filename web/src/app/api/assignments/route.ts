@@ -4,6 +4,8 @@ import {
   getTodayAssignment,
   createAssignment,
   getUserAssignments,
+  getIncompleteAssignments,
+  getPastAssignments,
 } from "@/lib/db-helpers";
 
 export async function GET(req: NextRequest) {
@@ -18,6 +20,16 @@ export async function GET(req: NextRequest) {
   if (view === "today") {
     const assignment = await getTodayAssignment(session.userId);
     return NextResponse.json({ assignment });
+  }
+
+  if (view === "incomplete") {
+    const assignments = await getIncompleteAssignments(session.userId);
+    return NextResponse.json({ assignments });
+  }
+
+  if (view === "past") {
+    const assignments = await getPastAssignments(session.userId);
+    return NextResponse.json({ assignments });
   }
 
   const assignments = await getUserAssignments(session.userId);

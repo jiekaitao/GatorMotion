@@ -13,6 +13,8 @@ ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 ENV MONGODB_URI=mongodb://placeholder
 ENV JWT_SECRET=placeholder
 ENV RESEND_API_KEY=placeholder
+ENV ELEVENLABS_API_KEY=placeholder
+ENV GEMINI_API_KEY=placeholder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

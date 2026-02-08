@@ -6,6 +6,9 @@ import CameraFeed from "@/components/CameraFeed";
 import PoseOverlay from "@/components/PoseOverlay";
 import SkeletonViewer from "@/components/SkeletonViewer";
 import { useExerciseWebSocket } from "@/hooks/useExerciseWebSocket";
+import DebugPanel from "@/components/DebugPanel";
+import PainStopOverlay from "@/components/PainStopOverlay";
+import ExerciseReport from "@/components/ExerciseReport";
 import { useTtsIntro } from "@/hooks/useTtsIntro";
 import confetti from "canvas-confetti";
 import {
@@ -86,6 +89,20 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
   // Transition animation
   const [transitioning, setTransitioning] = useState(false);
 
+  // Pain stop state
+  const [paused, setPaused] = useState(false);
+  const painStopCooldownRef = useRef(false);
+
+  // Session metrics
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const metricsRef = useRef({
+    startTime: 0,
+    repTimestamps: [] as number[],
+    painEvents: [] as { timeMs: number; level: string }[],
+    formSamples: [] as string[],
+    lastPainLevel: "normal",
+  });
+
   // WebSocket
   const {
     connected: wsConnected,
@@ -93,6 +110,11 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
     formQuality,
     painLevel,
     painMessage,
+    ear,
+    mar,
+    angle,
+    repState,
+    sixSevenTriggered,
     landmarksRef,
     startCapture,
     stopCapture,
@@ -108,6 +130,84 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
       setCurrentRep(wsRepCount);
     }
   }, [wsRepCount, exerciseKey, currentRep]);
+
+  // Pain stop trigger
+  useEffect(() => {
+    if (painLevel === "stop" && phase === "active" && !paused && !painStopCooldownRef.current) {
+      setPaused(true);
+    }
+  }, [painLevel, phase, paused]);
+
+  // 6-7 Easter egg: play a random cached voice clip
+  const sixSevenPlayingRef = useRef(false);
+  useEffect(() => {
+    if (!sixSevenTriggered || sixSevenPlayingRef.current) return;
+    sixSevenPlayingRef.current = true;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/tts/six-seven");
+        if (!res.ok) throw new Error("fetch failed");
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.volume = 0.85;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          sixSevenPlayingRef.current = false;
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          sixSevenPlayingRef.current = false;
+        };
+        await audio.play();
+      } catch {
+        sixSevenPlayingRef.current = false;
+      }
+    })();
+  }, [sixSevenTriggered]);
+
+  const handlePainResume = useCallback(() => {
+    setPaused(false);
+    painStopCooldownRef.current = true;
+    setTimeout(() => {
+      painStopCooldownRef.current = false;
+    }, 10000);
+  }, []);
+
+  // Record startTime when entering active phase
+  useEffect(() => {
+    if (phase === "active" && metricsRef.current.startTime === 0) {
+      metricsRef.current.startTime = Date.now();
+    }
+  }, [phase]);
+
+  // Record rep timestamps
+  useEffect(() => {
+    if (phase === "active" && currentRep > 0 && metricsRef.current.startTime > 0) {
+      metricsRef.current.repTimestamps.push(Date.now() - metricsRef.current.startTime);
+    }
+  }, [currentRep, phase]);
+
+  // Record pain events
+  useEffect(() => {
+    if (phase === "active" && painLevel !== "normal" && painLevel !== metricsRef.current.lastPainLevel && metricsRef.current.startTime > 0) {
+      metricsRef.current.painEvents.push({
+        timeMs: Date.now() - metricsRef.current.startTime,
+        level: painLevel,
+      });
+    }
+    metricsRef.current.lastPainLevel = painLevel;
+  }, [painLevel, phase]);
+
+  // Sample form quality every 2s
+  useEffect(() => {
+    if (phase !== "active") return;
+    const interval = setInterval(() => {
+      metricsRef.current.formSamples.push(formQuality);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [phase, formQuality]);
 
   useEffect(() => {
     if (phase === "active" && currentRep >= reps && !completing) {
@@ -171,6 +271,43 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
       const data = await res.json();
       if (data.allCompleted) setAllDone(true);
 
+      // Compute form distribution from samples
+      const samples = metricsRef.current.formSamples;
+      const formDist = { good: 0, warning: 0, neutral: 0 };
+      for (const s of samples) {
+        if (s === "good") formDist.good++;
+        else if (s === "warning") formDist.warning++;
+        else formDist.neutral++;
+      }
+
+      // Save exercise session
+      const durationMs = metricsRef.current.startTime > 0 ? Date.now() - metricsRef.current.startTime : 0;
+      try {
+        const sessionRes = await fetch("/api/exercise-sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            assignmentId,
+            exerciseId,
+            exerciseName: name,
+            exerciseKey,
+            sets,
+            reps,
+            completedReps: completedReps,
+            durationMs,
+            repTimestamps: metricsRef.current.repTimestamps,
+            painEvents: metricsRef.current.painEvents,
+            formDistribution: formDist,
+          }),
+        });
+        if (sessionRes.ok) {
+          const sessionData = await sessionRes.json();
+          setSessionId(sessionData.sessionId);
+        }
+      } catch {
+        // Non-critical — don't block completion
+      }
+
       confetti({
         particleCount: 100,
         spread: 70,
@@ -218,27 +355,35 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
         padding: "var(--space-xl)",
         backgroundColor: "var(--color-bg)",
-        textAlign: "center",
+        overflowY: "auto",
       }}>
-        <div className="animate-success">
-          <CheckCircle2 size={80} strokeWidth={2} color="var(--color-green)" />
+        <div style={{ maxWidth: 700, width: "100%", textAlign: "center" }}>
+          <div className="animate-success">
+            <CheckCircle2 size={80} strokeWidth={2} color="var(--color-green)" />
+          </div>
+          <h1 style={{ marginTop: "var(--space-lg)", fontSize: "var(--text-display)", fontWeight: 800, color: allDone ? "var(--color-green)" : "var(--color-primary)" }}>
+            {allDone ? "All Exercises Complete!" : "Exercise Complete!"}
+          </h1>
+          <p className="text-small" style={{ marginTop: "var(--space-sm)", fontSize: "18px" }}>
+            {allDone ? "Amazing work! Your streak has been updated." : "Great job! Keep going."}
+          </p>
+
+          {sessionId && (
+            <div style={{ marginTop: "var(--space-xl)", textAlign: "left" }}>
+              <ExerciseReport sessionId={sessionId} />
+            </div>
+          )}
+
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: "var(--space-xl)", minWidth: 250, fontSize: "18px", fontWeight: 800, borderRadius: "var(--radius-xl)" }}
+            onClick={() => router.push("/home")}
+          >
+            {allDone ? "View Streak" : "Back to Exercises"}
+          </button>
         </div>
-        <h1 style={{ marginTop: "var(--space-lg)", fontSize: "var(--text-display)", fontWeight: 800, color: allDone ? "var(--color-green)" : "var(--color-primary)" }}>
-          {allDone ? "All Exercises Complete!" : "Exercise Complete!"}
-        </h1>
-        <p className="text-small" style={{ marginTop: "var(--space-sm)", fontSize: "18px" }}>
-          {allDone ? "Amazing work! Your streak has been updated." : "Great job! Keep going."}
-        </p>
-        <button
-          className="btn btn-primary"
-          style={{ marginTop: "var(--space-xl)", minWidth: 250, fontSize: "18px", fontWeight: 800, borderRadius: "var(--radius-xl)" }}
-          onClick={() => router.push("/home")}
-        >
-          {allDone ? "View Streak" : "Back to Exercises"}
-        </button>
       </div>
     );
   }
@@ -470,15 +615,21 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
         </div>
       )}
 
-      {painLevel !== "normal" && (
-        <div className="pain-overlay" style={{
-          backgroundColor: painLevel === "stop" ? "var(--color-red)" : "var(--color-orange)",
-        }}>
+      {painLevel === "warning" && (
+        <div className="pain-overlay" style={{ backgroundColor: "var(--color-orange)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
-            {painLevel === "stop" ? <XOctagon size={24} color="white" /> : <AlertTriangle size={24} color="white" />}
+            <AlertTriangle size={24} color="white" />
             <span style={{ color: "white", fontWeight: 700, fontSize: "16px" }}>{painMessage}</span>
           </div>
         </div>
+      )}
+
+      {paused && (
+        <PainStopOverlay
+          repCount={currentRep}
+          exerciseName={name}
+          onResume={handlePainResume}
+        />
       )}
 
       <header className="session-header">
@@ -635,6 +786,19 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
           </div>
         </div>
       </div>
+
+      {exerciseKey && (
+        <DebugPanel
+          painLevel={painLevel}
+          ear={ear}
+          mar={mar}
+          repCount={currentRep}
+          repState={repState}
+          angle={angle}
+          formQuality={formQuality}
+          wsConnected={wsConnected}
+        />
+      )}
     </div>
   );
 }

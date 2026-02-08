@@ -155,6 +155,26 @@ export async function getUserAssignments(userId: string) {
     .toArray();
 }
 
+export async function getIncompleteAssignments(userId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbAssignment>("assignments")
+    .find({ userId, allCompleted: false })
+    .sort({ date: -1 })
+    .limit(30)
+    .toArray();
+}
+
+export async function getPastAssignments(userId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbAssignment>("assignments")
+    .find({ userId, allCompleted: true })
+    .sort({ date: -1 })
+    .limit(30)
+    .toArray();
+}
+
 // ── Streaks ──
 
 export interface DbStreak {
@@ -566,4 +586,51 @@ export async function updateUserProfile(userId: string, data: { name?: string; v
 export async function findUserById(userId: string) {
   const db = await getDb();
   return db.collection<DbUser>("users").findOne({ _id: new ObjectId(userId) });
+}
+
+// ── Exercise Sessions ──
+
+export interface DbExerciseSession {
+  _id: ObjectId;
+  userId: string;
+  assignmentId: string;
+  exerciseId: string;
+  exerciseName: string;
+  exerciseKey?: string;
+  sets: number;
+  reps: number;
+  completedReps: number;
+  durationMs: number;
+  repTimestamps: number[];
+  painEvents: { timeMs: number; level: string }[];
+  formDistribution: { good: number; warning: number; neutral: number };
+  createdAt: Date;
+}
+
+export async function createExerciseSession(
+  data: Omit<DbExerciseSession, "_id" | "createdAt">
+) {
+  const db = await getDb();
+  const result = await db.collection("exercise_sessions").insertOne({
+    ...data,
+    createdAt: new Date(),
+  });
+  return result.insertedId;
+}
+
+export async function getExerciseSession(sessionId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbExerciseSession>("exercise_sessions")
+    .findOne({ _id: new ObjectId(sessionId) });
+}
+
+export async function getExerciseSessionsByUser(userId: string, limit = 30) {
+  const db = await getDb();
+  return db
+    .collection<DbExerciseSession>("exercise_sessions")
+    .find({ userId })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray();
 }

@@ -9,13 +9,14 @@ import {
   Play,
   Check,
   Lock,
-  Repeat,
   Dumbbell,
-  Timer,
-  Star,
   MessageCircle,
   User,
   UserPlus,
+  Flame,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
 } from "lucide-react";
 
 interface Exercise {
@@ -62,10 +63,26 @@ interface UserData {
   streak: { currentStreak: number; longestStreak: number; lastCompletedDate: string | null };
 }
 
+function formatAssignmentDate(dateStr: string): string {
+  const today = new Date();
+  const todayStr = today.toISOString().split("T")[0];
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toISOString().split("T")[0];
+
+  if (dateStr === todayStr) return "Today";
+  if (dateStr === yesterdayStr) return "Yesterday";
+
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [pastAssignments, setPastAssignments] = useState<Assignment[]>([]);
+  const [showPast, setShowPast] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -75,7 +92,7 @@ export default function HomePage() {
     try {
       const [meRes, assignRes, msgRes] = await Promise.all([
         fetch("/api/auth/me"),
-        fetch("/api/assignments?view=today"),
+        fetch("/api/assignments?view=incomplete"),
         fetch("/api/messages"),
       ]);
 
@@ -92,7 +109,7 @@ export default function HomePage() {
       }
 
       setUserData(meData);
-      setAssignment(assignData.assignment);
+      setAssignments(assignData.assignments || []);
 
       // Therapist: also fetch patients + invites
       if (meData.user?.role === "therapist") {
@@ -126,6 +143,20 @@ export default function HomePage() {
     window.addEventListener("invite-responded", handler);
     return () => window.removeEventListener("invite-responded", handler);
   }, [fetchData]);
+
+  // Fetch past assignments on demand
+  const handleTogglePast = async () => {
+    if (!showPast && pastAssignments.length === 0) {
+      try {
+        const res = await fetch("/api/assignments?view=past");
+        if (res.ok) {
+          const data = await res.json();
+          setPastAssignments(data.assignments || []);
+        }
+      } catch { /* ignore */ }
+    }
+    setShowPast((v) => !v);
+  };
 
   if (loading || !userData) {
     return (
@@ -218,13 +249,37 @@ export default function HomePage() {
 
   // Patient view
   const hasTherapist = userData.user.hasTherapist !== false;
-  const exercises = assignment?.exercises || [];
-  const completedCount = exercises.filter((e) => e.completed).length;
-  const totalCount = exercises.length;
-  const progressPercent = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
 
-  // Find the next uncompleted exercise
-  const nextExerciseIndex = exercises.findIndex((e) => !e.completed);
+  // Group assignments by date, flatten exercises with assignment ref
+  type FlatExercise = Exercise & { assignmentId: string };
+  const dateGroups: { date: string; exercises: FlatExercise[] }[] = [];
+  const dateMap = new Map<string, FlatExercise[]>();
+  for (const a of assignments) {
+    const existing = dateMap.get(a.date);
+    const mapped = a.exercises.map((ex) => ({ ...ex, assignmentId: a._id }));
+    if (existing) {
+      existing.push(...mapped);
+    } else {
+      const arr = [...mapped];
+      dateMap.set(a.date, arr);
+      dateGroups.push({ date: a.date, exercises: arr });
+    }
+  }
+
+  // Find global first incomplete exercise for "Up Next" badge + CTA
+  let globalNextExercise: FlatExercise | null = null;
+  for (const group of dateGroups) {
+    for (const ex of group.exercises) {
+      if (!ex.completed) {
+        globalNextExercise = ex;
+        break;
+      }
+    }
+    if (globalNextExercise) break;
+  }
+
+  const completedCount = dateGroups.reduce((s, g) => s + g.exercises.filter(e => e.completed).length, 0);
+  const remainingCount = dateGroups.reduce((s, g) => s + g.exercises.filter(e => !e.completed).length, 0);
 
   return (
     <>
@@ -235,452 +290,256 @@ export default function HomePage() {
           <div
             className="animate-in"
             style={{
-              padding: "var(--space-lg)",
+              padding: "var(--space-md) var(--space-lg)",
               borderRadius: "var(--radius-xl)",
               border: "2px dashed var(--color-gray-200)",
               backgroundColor: "var(--color-snow, #f9fafb)",
               display: "flex",
               alignItems: "center",
               gap: "var(--space-md)",
-              marginBottom: "var(--space-xl)",
+              marginBottom: "var(--space-lg)",
             }}
           >
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: "var(--radius-full)",
-                backgroundColor: "var(--color-blue-light)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <UserPlus size={28} color="var(--color-blue)" />
+            <div style={{ width: 44, height: 44, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <UserPlus size={22} color="var(--color-blue)" />
             </div>
-            <p style={{ fontWeight: 600, color: "var(--color-gray-500)", lineHeight: 1.4 }}>
-              Ask your physical therapist to add your username,{" "}
-              <strong style={{ color: "var(--color-gray-600, #333)" }}>{userData.user.username}</strong>
-              , as their patient
+            <p style={{ fontWeight: 600, color: "var(--color-gray-500)", lineHeight: 1.4, fontSize: "var(--text-small)" }}>
+              Ask your physical therapist to add your username{" "}
+              <strong style={{ color: "var(--color-gray-600)" }}>{userData.user.username}</strong>
             </p>
           </div>
         )}
 
-        {/* ── Two-Column Dashboard Grid ── */}
-        <div className="home-grid" style={{ ...(!hasTherapist ? { opacity: 0.45, pointerEvents: "none", filter: "grayscale(0.4)" } : {}) }}>
+        {/* ── Profile + Assignments Row ── */}
+        <div className="home-profile-row" style={{ ...(!hasTherapist ? { opacity: 0.45, pointerEvents: "none", filter: "grayscale(0.4)" } : {}) }}>
 
-        {/* ── Left Column: Progress + Exercises ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-xl)" }}>
-
-        {/* ── Daily Progress Hero Card ── */}
-        {totalCount > 0 && <section
-          className="card animate-in"
-          style={{
-            display: "flex",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: "var(--space-lg)",
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ flex: 1, zIndex: 1 }}>
-            <h2 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-sm)" }}>
-              Daily Progress
-            </h2>
-            <p style={{ color: "var(--color-gray-400)", fontWeight: 500, marginBottom: "var(--space-lg)" }}>
-              {completedCount === totalCount
-                ? `You're all done for today, ${userData.user.name.split(" ")[0]}!`
-                : completedCount === 0
-                  ? `Let's get started, ${userData.user.name.split(" ")[0]}!`
-                  : `Keep it up, ${userData.user.name.split(" ")[0]}!`}
-            </p>
-
-            {/* Progress label + bar */}
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "var(--space-sm)" }}>
-              <span style={{ color: "var(--color-green)", fontWeight: 700, textTransform: "uppercase", fontSize: "var(--text-small)", letterSpacing: "0.05em" }}>
-                {completedCount} of {totalCount} exercises
-              </span>
-              <span style={{ color: "var(--color-green)", fontWeight: 700, fontSize: "var(--text-small)" }}>
-                {Math.round(progressPercent)}%
-              </span>
+          {/* Profile Card */}
+          <div className="home-profile-card animate-in">
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+              <div className="home-avatar">
+                <span style={{ fontSize: "20px", fontWeight: 800, color: "white" }}>
+                  {userData.user.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ fontSize: "16px", fontWeight: 800, lineHeight: 1.2 }}>{userData.user.name}</h3>
+                <p style={{ fontSize: "12px", color: "var(--color-gray-300)", fontWeight: 500 }}>@{userData.user.username}</p>
+              </div>
             </div>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${progressPercent}%` }} />
+
+            {/* Streak + Stats in a compact row */}
+            <div style={{ display: "flex", gap: "var(--space-sm)", marginTop: "var(--space-md)" }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderRadius: "var(--radius-md)", backgroundColor: "var(--color-snow)", border: "1px solid var(--color-gray-100)" }}>
+                <Flame size={18} color="var(--color-orange)" fill="var(--color-orange)" />
+                <div>
+                  <span style={{ fontSize: "18px", fontWeight: 800, color: "var(--color-orange)" }}>{userData.streak.currentStreak}</span>
+                  <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-gray-400)", marginLeft: 3 }}>days</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "center", padding: "8px 12px", borderRadius: "var(--radius-md)", backgroundColor: "var(--color-green-surface)" }}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--color-green)", lineHeight: 1 }}>{completedCount}</div>
+                <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--color-green-dark)", textTransform: "uppercase" }}>Done</div>
+              </div>
+              <div style={{ textAlign: "center", padding: "8px 12px", borderRadius: "var(--radius-md)", backgroundColor: "var(--color-primary-surface)" }}>
+                <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--color-primary)", lineHeight: 1 }}>{remainingCount}</div>
+                <div style={{ fontSize: "9px", fontWeight: 700, color: "var(--color-primary-dark)", textTransform: "uppercase" }}>Left</div>
+              </div>
             </div>
           </div>
 
-          {/* Mascot / Star icon */}
-          <div
-            style={{
-              width: 80,
-              height: 80,
-              flexShrink: 0,
-              borderRadius: "var(--radius-full)",
-              backgroundColor: "var(--color-green-surface)",
-              border: "4px solid var(--color-green)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative",
-              zIndex: 1,
-            }}
-          >
-            <Star size={36} color="var(--color-green)" fill="var(--color-green-light)" />
-            <div
-              style={{
-                position: "absolute",
-                bottom: -4,
-                right: -4,
-                backgroundColor: "var(--color-white)",
-                borderRadius: "var(--radius-full)",
-                border: "2px solid var(--color-gray-100)",
-                padding: 4,
-                display: "flex",
-              }}
-            >
-              <Star size={14} color="var(--color-orange)" fill="var(--color-orange)" />
+          {/* Assignments Section */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-sm)" }}>
+              <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Assignments</h3>
+              <button
+                onClick={handleTogglePast}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  color: "var(--color-primary)",
+                }}
+              >
+                {showPast ? "Hide Past" : "View Past"}
+                {showPast ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
             </div>
-          </div>
 
-          {/* Decorative background circle */}
-          <div
-            style={{
-              position: "absolute",
-              right: -40,
-              top: -40,
-              width: 200,
-              height: 200,
-              borderRadius: "var(--radius-full)",
-              backgroundColor: "rgba(88, 204, 2, 0.05)",
-              zIndex: 0,
-            }}
-          />
-        </section>}
+            {dateGroups.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                {dateGroups.map((group) => (
+                  <div key={group.date} className="animate-in">
+                    {/* Date header — one per date */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <Calendar size={12} color="var(--color-gray-300)" />
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-gray-400)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                        {formatAssignmentDate(group.date)}
+                      </span>
+                    </div>
 
-        {/* ── Today's Plan Section ── */}
-        <section>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
-            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Today&apos;s Plan</h3>
-          </div>
+                    {/* All exercises for this date */}
+                    {group.exercises.map((ex) => {
+                      const isCompleted = ex.completed;
+                      const isGlobalNext = globalNextExercise === ex;
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-md)" }}>
-            {exercises.length > 0 ? (
-              exercises.map((ex, i) => {
-                const isCompleted = ex.completed;
-                const isNext = i === nextExerciseIndex;
-                const isLocked = !isCompleted && !isNext;
+                      if (isCompleted) {
+                        return (
+                          <div key={`${ex.assignmentId}-${ex.exerciseId}`} style={{ marginBottom: 4 }}>
+                            <div style={{
+                              display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px 10px",
+                              borderRadius: "var(--radius-md)", backgroundColor: "var(--color-green-surface)", border: "1px solid var(--color-green)",
+                            }}>
+                              <div style={{ width: 24, height: 24, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-green)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <Check size={12} color="white" strokeWidth={3} />
+                              </div>
+                              <span style={{ fontWeight: 600, color: "var(--color-gray-400)", textDecoration: "line-through", fontSize: "13px" }}>{ex.exerciseName}</span>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                // Completed card
-                if (isCompleted) {
-                  return (
-                    <div
-                      key={ex.exerciseId}
-                      className="animate-in"
-                      style={{ animationDelay: `${i * 60}ms` }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-md)",
-                          padding: "var(--space-md)",
-                          borderRadius: "var(--radius-xl)",
-                          backgroundColor: "var(--color-green-surface)",
-                          border: "2px solid var(--color-green)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: "var(--radius-xl)",
-                            backgroundColor: "var(--color-green-light)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                          }}
-                        >
+                      if (isGlobalNext) {
+                        return (
                           <div
-                            style={{
-                              width: 28,
-                              height: 28,
-                              borderRadius: "var(--radius-full)",
-                              backgroundColor: "var(--color-green)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
+                            key={`${ex.assignmentId}-${ex.exerciseId}`}
+                            style={{ marginBottom: 4, cursor: "pointer" }}
+                            onClick={() => {
+                              let url = `/exercise/${ex.assignmentId}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`;
+                              if (ex.exerciseKey) url += `&exerciseKey=${ex.exerciseKey}`;
+                              if (ex.skeletonDataFile) url += `&skeletonDataFile=${ex.skeletonDataFile}`;
+                              router.push(url);
                             }}
                           >
-                            <Check size={16} color="white" strokeWidth={3} />
-                          </div>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <h4 style={{ fontWeight: 700, color: "var(--color-gray-400)", textDecoration: "line-through", textDecorationColor: "var(--color-green)" }}>
-                            {ex.exerciseName}
-                          </h4>
-                          <p style={{ fontSize: "var(--text-small)", fontWeight: 500, color: "var(--color-green)" }}>Completed</p>
-                        </div>
-                        <div style={{ padding: "0 var(--space-md)" }}>
-                          <span style={{ color: "var(--color-green)", fontWeight: 800, fontSize: "18px" }}>100%</span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // Active (up next) card
-                if (isNext) {
-                  return (
-                    <div
-                      key={ex.exerciseId}
-                      className="animate-in"
-                      style={{ animationDelay: `${i * 60}ms`, position: "relative", cursor: "pointer" }}
-                      onClick={() => {
-                        let url = `/exercise/${assignment!._id}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`;
-                        if (ex.exerciseKey) url += `&exerciseKey=${ex.exerciseKey}`;
-                        if (ex.skeletonDataFile) url += `&skeletonDataFile=${ex.skeletonDataFile}`;
-                        router.push(url);
-                      }}
-                    >
-                      {/* Pulse glow */}
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: -4,
-                          borderRadius: "var(--radius-xl)",
-                          background: "rgba(28, 176, 246, 0.2)",
-                          filter: "blur(8px)",
-                          opacity: 0.75,
-                        }}
-                        className="animate-pulse"
-                      />
-                      <div
-                        style={{
-                          position: "relative",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-md)",
-                          padding: "var(--space-md)",
-                          borderRadius: "var(--radius-xl)",
-                          backgroundColor: "var(--color-white)",
-                          border: "2px solid var(--color-blue)",
-                          boxShadow: "var(--shadow-tactile) var(--color-blue-dark)",
-                          transition: "transform 0.1s, box-shadow 0.1s",
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 64,
-                            height: 64,
-                            borderRadius: "var(--radius-xl)",
-                            backgroundColor: "var(--color-blue-light)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                          }}
-                        >
-                          <Dumbbell size={28} color="var(--color-blue)" />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: 4 }}>
-                            <h4 style={{ fontWeight: 800, fontSize: "18px" }}>{ex.exerciseName}</h4>
-                            <span
-                              style={{
-                                padding: "2px 8px",
-                                borderRadius: 4,
-                                fontSize: "10px",
-                                fontWeight: 700,
-                                backgroundColor: "var(--color-blue)",
-                                color: "white",
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                              }}
-                            >
-                              Up Next
-                            </span>
-                          </div>
-                          <div style={{ display: "flex", gap: "var(--space-md)", fontSize: "var(--text-small)", color: "var(--color-gray-400)", fontWeight: 500 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <Repeat size={16} />
-                              <span>{ex.sets} sets</span>
+                            <div style={{
+                              display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "10px 12px",
+                              borderRadius: "var(--radius-lg)", backgroundColor: "var(--color-white)", border: "2px solid var(--color-blue)",
+                              boxShadow: "var(--shadow-tactile-sm) var(--color-blue-dark)", transition: "transform 0.1s, box-shadow 0.1s",
+                            }}>
+                              <div style={{ width: 36, height: 36, borderRadius: "var(--radius-md)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <Dumbbell size={18} color="var(--color-blue)" />
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ fontWeight: 800, fontSize: "15px" }}>{ex.exerciseName}</span>
+                                  <span style={{ padding: "1px 5px", borderRadius: 3, fontSize: "9px", fontWeight: 700, backgroundColor: "var(--color-blue)", color: "white", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                                    Next
+                                  </span>
+                                </div>
+                                <div style={{ display: "flex", gap: "var(--space-md)", fontSize: "12px", color: "var(--color-gray-400)", fontWeight: 500, marginTop: 1 }}>
+                                  <span>{ex.sets}×{ex.reps} reps</span>
+                                  {ex.holdSec > 0 && <span>{ex.holdSec}s hold</span>}
+                                </div>
+                              </div>
+                              <Play size={22} color="var(--color-blue)" fill="var(--color-blue)" />
                             </div>
-                            {ex.holdSec > 0 ? (
-                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <Timer size={16} />
-                                <span>{ex.holdSec} sec</span>
-                              </div>
-                            ) : (
-                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <Dumbbell size={16} />
-                                <span>{ex.reps} reps</span>
-                              </div>
-                            )}
+                          </div>
+                        );
+                      }
+
+                      // Locked
+                      return (
+                        <div key={`${ex.assignmentId}-${ex.exerciseId}`} style={{ marginBottom: 4 }}>
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "6px 10px",
+                            borderRadius: "var(--radius-md)", backgroundColor: "var(--color-white)", border: "1px solid var(--color-gray-100)",
+                            opacity: 0.55,
+                          }}>
+                            <div style={{ width: 24, height: 24, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-snow)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              <Dumbbell size={12} color="var(--color-gray-300)" />
+                            </div>
+                            <span style={{ fontWeight: 600, fontSize: "13px", flex: 1 }}>{ex.exerciseName}</span>
+                            <Lock size={14} color="var(--color-gray-200)" />
                           </div>
                         </div>
-                        <div style={{ paddingRight: "var(--space-sm)" }}>
-                          <Play size={32} color="var(--color-blue)" fill="var(--color-blue)" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // Locked (pending) card
-                return (
-                  <div
-                    key={ex.exerciseId}
-                    className="animate-in"
-                    style={{ animationDelay: `${i * 60}ms` }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-md)",
-                        padding: "var(--space-md)",
-                        borderRadius: "var(--radius-xl)",
-                        backgroundColor: "var(--color-white)",
-                        border: "2px solid var(--color-gray-100)",
-                        boxShadow: "var(--shadow-tactile-sm) var(--color-gray-100)",
-                        opacity: 0.7,
-                        cursor: "default",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 64,
-                          height: 64,
-                          borderRadius: "var(--radius-xl)",
-                          backgroundColor: "var(--color-snow)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          filter: "grayscale(1)",
-                        }}
-                      >
-                        <Dumbbell size={28} color="var(--color-gray-300)" />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <h4 style={{ fontWeight: 700 }}>{ex.exerciseName}</h4>
-                        <div style={{ display: "flex", gap: "var(--space-md)", fontSize: "var(--text-small)", color: "var(--color-gray-400)", fontWeight: 500, marginTop: 4 }}>
-                          {ex.holdSec > 0 ? (
-                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                              <Timer size={16} />
-                              <span>{ex.holdSec} sec</span>
-                            </div>
-                          ) : (
-                            <>
-                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <Repeat size={16} />
-                                <span>{ex.sets} sets</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                <Dumbbell size={16} />
-                                <span>{ex.reps} reps</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ paddingRight: "var(--space-sm)", color: "var(--color-gray-200)" }}>
-                        <Lock size={28} />
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })
+                ))}
+              </div>
             ) : (
-              <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
-                <Dumbbell size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
-                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>
-                  No exercises assigned yet.
-                </p>
-                <p className="text-small" style={{ marginTop: "var(--space-sm)" }}>
+              <div className="card text-center" style={{ padding: "var(--space-lg)" }}>
+                <Dumbbell size={32} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-xs)" }} />
+                <p style={{ color: "var(--color-gray-300)", fontWeight: 600, fontSize: "var(--text-small)" }}>No exercises assigned yet.</p>
+                <p className="text-small" style={{ marginTop: 4, fontSize: "12px" }}>
                   We&apos;re waiting on your therapist to assign exercises.
                 </p>
               </div>
             )}
+
+            {/* Past Assignments */}
+            {showPast && (
+              <div style={{ marginTop: "var(--space-md)", paddingTop: "var(--space-md)", borderTop: "1px solid var(--color-gray-100)" }}>
+                <h4 style={{ fontSize: "12px", fontWeight: 700, color: "var(--color-gray-300)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "var(--space-sm)" }}>
+                  Past Assignments
+                </h4>
+                {pastAssignments.length > 0 ? (
+                  pastAssignments.map((a) => (
+                    <div key={a._id} style={{ marginBottom: "var(--space-sm)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                        <Calendar size={11} color="var(--color-gray-300)" />
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-gray-300)" }}>{formatAssignmentDate(a.date)}</span>
+                        <span className="badge badge-green" style={{ fontSize: "9px", padding: "1px 5px" }}>Done</span>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                        {a.exercises.map((ex) => (
+                          <span key={ex.exerciseId} style={{
+                            fontSize: "11px", fontWeight: 600, color: "var(--color-gray-400)",
+                            padding: "3px 8px", borderRadius: 6, backgroundColor: "var(--color-snow)", border: "1px solid var(--color-gray-100)",
+                          }}>
+                            {ex.exerciseName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ fontSize: "12px", color: "var(--color-gray-300)", textAlign: "center" }}>No past assignments yet.</p>
+                )}
+              </div>
+            )}
           </div>
-        </section>
+        </div>
 
-        </div>{/* end left column */}
-
-        {/* ── Right Column: Messages ── */}
-        <section style={{ display: "flex", flexDirection: "column" }}>
-          <div className="card" style={{ padding: "var(--space-lg)", flex: 1, minHeight: 400 }}>
-            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-md)" }}>Conversations</h3>
+        {/* ── Conversations Section (full width below) ── */}
+        <section style={{ marginTop: "var(--space-lg)", ...(!hasTherapist ? { opacity: 0.45, pointerEvents: "none", filter: "grayscale(0.4)" } : {}) }}>
+          <div className="card" style={{ padding: "var(--space-md) var(--space-lg)" }}>
+            <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800, marginBottom: "var(--space-sm)" }}>Conversations</h3>
             {conversations.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {conversations.map((c) => (
                   <Link
                     key={c.partnerId}
                     href={`/messages/${c.partnerId}?name=${encodeURIComponent(c.partnerName)}`}
                     style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}
                   >
-                    <div
-                      className="card-interactive animate-in"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--space-md)",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: "var(--radius-full)",
-                          backgroundColor: "var(--color-blue-light)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <User size={22} color="var(--color-blue)" />
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: "var(--space-sm)", padding: "8px 10px",
+                      borderRadius: "var(--radius-md)", border: "1px solid var(--color-gray-100)",
+                      transition: "background 0.15s",
+                    }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <User size={18} color="var(--color-blue)" />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontWeight: 700 }}>{c.partnerName}</span>
+                          <span style={{ fontWeight: 700, fontSize: "14px" }}>{c.partnerName}</span>
                           {c.unreadCount > 0 && (
-                            <span
-                              style={{
-                                backgroundColor: "var(--color-primary)",
-                                color: "white",
-                                fontSize: "12px",
-                                fontWeight: 700,
-                                borderRadius: "var(--radius-full)",
-                                minWidth: 22,
-                                height: 22,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                padding: "0 6px",
-                              }}
-                            >
+                            <span style={{
+                              backgroundColor: "var(--color-primary)", color: "white", fontSize: "11px", fontWeight: 700,
+                              borderRadius: "var(--radius-full)", minWidth: 18, height: 18,
+                              display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px",
+                            }}>
                               {c.unreadCount}
                             </span>
                           )}
                         </div>
-                        <div
-                          style={{
-                            fontSize: "var(--text-small)",
-                            color: "var(--color-gray-400)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            marginTop: 2,
-                          }}
-                        >
-                          {c.lastMessage
-                            ? c.lastMessage.content
-                            : "No messages yet — tap to start"}
+                        <div style={{ fontSize: "12px", color: "var(--color-gray-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
+                          {c.lastMessage ? c.lastMessage.content : "No messages yet"}
                         </div>
                       </div>
                     </div>
@@ -688,29 +547,24 @@ export default function HomePage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center">
-                <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
-                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
-                <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>
-                  Your therapist will appear here once they message you.
-                </p>
+              <div className="text-center" style={{ padding: "var(--space-md) 0" }}>
+                <MessageCircle size={28} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-xs)" }} />
+                <p style={{ color: "var(--color-gray-300)", fontWeight: 600, fontSize: "var(--text-small)" }}>No conversations yet</p>
               </div>
             )}
           </div>
         </section>
-
-        </div>{/* end home-grid */}
       </div>
 
       {/* Fixed CTA */}
-      {nextExerciseIndex >= 0 && (
+      {globalNextExercise && (
         <div className="fixed-cta">
           <button
             className="btn btn-primary"
             style={{ fontSize: "18px", fontWeight: 800 }}
             onClick={() => {
-              const ex = exercises[nextExerciseIndex];
-              let url = `/exercise/${assignment!._id}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`;
+              const ex = globalNextExercise!;
+              let url = `/exercise/${ex.assignmentId}?exerciseId=${ex.exerciseId}&name=${encodeURIComponent(ex.exerciseName)}&sets=${ex.sets}&reps=${ex.reps}&holdSec=${ex.holdSec}`;
               if (ex.exerciseKey) url += `&exerciseKey=${ex.exerciseKey}`;
               if (ex.skeletonDataFile) url += `&skeletonDataFile=${ex.skeletonDataFile}`;
               router.push(url);

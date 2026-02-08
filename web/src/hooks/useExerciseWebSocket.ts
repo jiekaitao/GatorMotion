@@ -44,6 +44,7 @@ interface UseExerciseWebSocketResult {
   mar: number;
   angle: number;
   repState: string;
+  sixSevenTriggered: boolean;
   landmarksRef: React.RefObject<LandmarkFrame>;
   startCapture: (videoElement: HTMLVideoElement) => void;
   stopCapture: () => void;
@@ -65,6 +66,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
   const [mar, setMar] = useState(0);
   const [angle, setAngle] = useState(0);
   const [repState, setRepState] = useState("waiting");
+  const [sixSevenTriggered, setSixSevenTriggered] = useState(false);
 
   const lastUiUpdateRef = useRef(0);
   const landmarksRef = useRef<LandmarkFrame>({
@@ -163,6 +165,13 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
             };
           }
 
+          // 6-7 Easter egg — check every frame (rare event)
+          if (data.six_seven?.triggered) {
+            setSixSevenTriggered(true);
+            // Auto-reset after a short delay so the next trigger can fire
+            setTimeout(() => setSixSevenTriggered(false), 1000);
+          }
+
           // Throttle React state updates to ~4/sec
           const now = performance.now();
           if (now - lastUiUpdateRef.current > 250) {
@@ -247,6 +256,7 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
     mar,
     angle,
     repState,
+    sixSevenTriggered,
     landmarksRef,
     startCapture,
     stopCapture,

@@ -250,7 +250,7 @@ export default function TherapistPatientsPage() {
                 >
                   <div>
                     <div style={{ fontWeight: 700 }}>{p.name}</div>
-                    <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>@{p.username}</div>
+                    <div className="text-tiny" style={{ color: "var(--color-gray-300)", textDecoration: "none" }}>@{p.username}</div>
                     {exercises.length > 0 && (
                       <div className="exercise-indicators" style={{ marginTop: 6 }}>
                         {exercises.map((ex, i) => (

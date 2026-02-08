@@ -180,6 +180,70 @@ class RepCounter:
         self.controller.reset()
 
 
+class SixSevenDetector:
+    """
+    Easter egg: detects the '6-7' hand-wave gesture.
+    Triggers when the user alternates which hand is higher 3+ times
+    within a short window (like waving hands up and down alternately).
+    Uses pose wrist landmarks (15=L wrist, 16=R wrist).
+    """
+
+    def __init__(self, swap_threshold: int = 3, window_sec: float = 3.0, cooldown_sec: float = 30.0):
+        self.swap_threshold = swap_threshold
+        self.window_sec = window_sec
+        self.cooldown_sec = cooldown_sec
+        self.last_higher: str | None = None  # "left" or "right"
+        self.swap_times: list[float] = []
+        self.last_trigger_time: float = 0.0
+        self.min_y_diff = 0.03  # minimum Y difference to count as a swap (normalized coords)
+
+    def update(self, landmarks, frame_width: int, frame_height: int) -> dict:
+        """
+        landmarks: list of pose landmark objects with .x, .y, .visibility
+        Returns dict with {"triggered": bool}
+        """
+        if not landmarks or len(landmarks) < 17:
+            return {"triggered": False}
+
+        l_wrist = landmarks[15]  # Left wrist
+        r_wrist = landmarks[16]  # Right wrist
+
+        # Need decent visibility on both wrists
+        if getattr(l_wrist, "visibility", 1.0) < 0.5 or getattr(r_wrist, "visibility", 1.0) < 0.5:
+            return {"triggered": False}
+
+        now = time.time()
+
+        # Check cooldown
+        if now - self.last_trigger_time < self.cooldown_sec:
+            return {"triggered": False}
+
+        # Determine which hand is higher (lower Y = higher on screen)
+        y_diff = l_wrist.y - r_wrist.y
+        if abs(y_diff) < self.min_y_diff:
+            return {"triggered": False}
+
+        current_higher = "left" if y_diff < 0 else "right"
+
+        # Detect swap
+        if self.last_higher is not None and current_higher != self.last_higher:
+            self.swap_times.append(now)
+
+        self.last_higher = current_higher
+
+        # Prune old swaps outside window
+        self.swap_times = [t for t in self.swap_times if now - t < self.window_sec]
+
+        # Check if enough swaps to trigger
+        if len(self.swap_times) >= self.swap_threshold:
+            self.swap_times.clear()
+            self.last_trigger_time = now
+            self.last_higher = None
+            return {"triggered": True}
+
+        return {"triggered": False}
+
+
 class PainDetector:
     def __init__(self):
         self.pain_level = "normal"

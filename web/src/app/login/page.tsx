@@ -4,7 +4,6 @@ import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Flame, Dumbbell, Shield } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -60,22 +59,6 @@ export default function LoginPage() {
           </div>
           <h1 className="login-title">GatorMotion</h1>
           <p className="login-subtitle">Your PT recovery companion</p>
-
-          {/* Feature pills */}
-          <div className="login-features">
-            <div className="login-pill">
-              <Flame size={14} color="var(--color-orange)" />
-              <span>Streaks</span>
-            </div>
-            <div className="login-pill">
-              <Dumbbell size={14} color="var(--color-blue)" />
-              <span>Guided PT</span>
-            </div>
-            <div className="login-pill">
-              <Shield size={14} color="var(--color-green)" />
-              <span>Therapist-led</span>
-            </div>
-          </div>
         </div>
 
         {/* Login card */}

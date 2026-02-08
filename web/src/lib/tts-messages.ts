@@ -1,3 +1,12 @@
+/** Map display names to TTS-friendly pronunciations. */
+const TTS_NAME_MAP: Record<string, string> = {
+  "Arm VW Raise": "Arm V to W Raise",
+};
+
+function ttsName(exerciseName: string): string {
+  return TTS_NAME_MAP[exerciseName] ?? exerciseName;
+}
+
 const TEMPLATES = [
   (first: string, exercise: string) =>
     `Hey ${first}, let's crush those ${exercise} today! You've got this.`,
@@ -16,5 +25,5 @@ const TEMPLATES = [
 export function generateIntroMessage(fullName: string, exerciseName: string): string {
   const firstName = fullName.split(" ")[0];
   const template = TEMPLATES[Math.floor(Math.random() * TEMPLATES.length)];
-  return template(firstName, exerciseName);
+  return template(firstName, ttsName(exerciseName));
 }

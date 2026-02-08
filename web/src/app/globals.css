@@ -1331,3 +1331,183 @@ a { color: var(--color-blue); text-decoration: none; }
     opacity: 1;
   }
 }
+
+/* ── Debug Panel ── */
+.debug-toggle {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.55);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s;
+}
+.debug-toggle:hover {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.debug-panel {
+  position: fixed;
+  bottom: 60px;
+  left: 16px;
+  width: 260px;
+  background: rgba(20, 20, 30, 0.88);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 14px;
+  z-index: 300;
+  color: #ddd;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  animation: debugFadeIn 0.2s ease-out;
+}
+
+@keyframes debugFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Pain Stop Overlay ── */
+.pain-stop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(234, 43, 43, 0.12);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+  animation: painOverlayIn 0.3s ease-out;
+  cursor: pointer;
+}
+
+@keyframes painOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pain-stop-card {
+  background: var(--color-white);
+  border: 3px solid var(--color-red);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl) var(--space-2xl);
+  text-align: center;
+  box-shadow: 0 16px 48px rgba(234, 43, 43, 0.2);
+  animation: painCardPop 0.4s var(--ease-out-back);
+  cursor: default;
+  max-width: 420px;
+  width: 90%;
+}
+
+@keyframes painCardPop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Exercise Report ── */
+.report-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.report-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+}
+
+@media (min-width: 500px) {
+  .report-stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.report-stat-card {
+  background: var(--color-white);
+  border: 2px solid var(--color-gray-100);
+  border-radius: var(--radius-lg);
+  padding: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.report-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--color-gray-600);
+  line-height: 1;
+}
+
+.report-stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-gray-300);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.report-chart-card {
+  background: var(--color-white);
+  border: 2px solid var(--color-gray-100);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+/* ── Home Page Profile Row ── */
+.home-profile-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+@media (min-width: 768px) {
+  .home-profile-row {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+.home-profile-card {
+  background: var(--color-white);
+  border: 2px solid var(--color-gray-100);
+  border-radius: var(--radius-xl);
+  padding: var(--space-lg);
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .home-profile-card {
+    width: 280px;
+    min-width: 280px;
+  }
+}
+
+.home-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.home-streak-inline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-orange);
+  font-weight: 800;
+}
