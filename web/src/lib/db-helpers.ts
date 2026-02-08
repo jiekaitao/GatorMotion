@@ -259,6 +259,7 @@ export interface DbInvite {
   patientId: string;
   patientUsername: string;
   status: "pending" | "accepted" | "declined" | "revoked";
+  therapistSeen?: boolean;
   createdAt: Date;
 }
 
@@ -332,6 +333,30 @@ export async function getNotificationCount(userId: string) {
   return db
     .collection<DbInvite>("invites")
     .countDocuments({ patientId: userId, status: "pending" });
+}
+
+export async function getTherapistNotifications(therapistId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbInvite>("invites")
+    .find({ therapistId, status: "accepted", therapistSeen: { $ne: true } })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function getTherapistNotificationCount(therapistId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbInvite>("invites")
+    .countDocuments({ therapistId, status: "accepted", therapistSeen: { $ne: true } });
+}
+
+export async function markTherapistNotificationsSeen(therapistId: string) {
+  const db = await getDb();
+  await db.collection("invites").updateMany(
+    { therapistId, status: "accepted", therapistSeen: { $ne: true } },
+    { $set: { therapistSeen: true } }
+  );
 }
 
 export async function revokeInvite(inviteId: string, therapistId: string) {
@@ -467,6 +492,35 @@ export async function getConversationList(userId: string) {
     const bTime = b.lastMessage?.createdAt?.getTime() || 0;
     return bTime - aTime;
   });
+}
+
+export async function getUnreadMessageCount(userId: string) {
+  const db = await getDb();
+  return db.collection<DbMessage>("messages").countDocuments({
+    receiverId: userId,
+    read: false,
+  });
+}
+
+export async function getUnreadMessageSenders(userId: string) {
+  const db = await getDb();
+  const senderIds = await db.collection<DbMessage>("messages").distinct("senderId", {
+    receiverId: userId,
+    read: false,
+  });
+
+  const senders = await Promise.all(
+    senderIds.map(async (sid) => {
+      const user = await db.collection<DbUser>("users").findOne({ _id: new ObjectId(sid) });
+      const count = await db.collection<DbMessage>("messages").countDocuments({
+        senderId: sid,
+        receiverId: userId,
+        read: false,
+      });
+      return { senderId: sid, senderName: user?.name || "Unknown", count };
+    })
+  );
+  return senders;
 }
 
 export async function markMessagesRead(senderId: string, receiverId: string) {

@@ -42,8 +42,21 @@ interface Conversation {
   unreadCount: number;
 }
 
+interface Patient {
+  _id: string;
+  name: string;
+  username: string;
+  streak: { currentStreak: number; lastCompletedDate: string | null } | null;
+}
+
+interface Invite {
+  _id: string;
+  patientUsername: string;
+  status: string;
+}
+
 interface UserData {
-  user: { id: string; name: string; username: string; role: string; hasTherapist?: boolean };
+  user: { id: string; name: string; username: string; role: string; hasTherapist?: boolean; notificationCount?: number };
   streak: { currentStreak: number; longestStreak: number; lastCompletedDate: string | null };
 }
 
@@ -52,6 +65,8 @@ export default function HomePage() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -76,6 +91,22 @@ export default function HomePage() {
 
       setUserData(meData);
       setAssignment(assignData.assignment);
+
+      // Therapist: also fetch patients + invites
+      if (meData.user?.role === "therapist") {
+        const [pRes, iRes] = await Promise.all([
+          fetch("/api/patients"),
+          fetch("/api/invites"),
+        ]);
+        if (pRes.ok) {
+          const pData = await pRes.json();
+          setPatients(pData.patients || []);
+        }
+        if (iRes.ok) {
+          const iData = await iRes.json();
+          setInvites(iData.invites || []);
+        }
+      }
     } catch {
       router.replace("/login");
     } finally {
@@ -85,6 +116,13 @@ export default function HomePage() {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  // Re-fetch immediately when an invite is accepted/declined
+  useEffect(() => {
+    const handler = () => fetchData();
+    window.addEventListener("invite-responded", handler);
+    return () => window.removeEventListener("invite-responded", handler);
   }, [fetchData]);
 
   if (loading || !userData) {
@@ -97,6 +135,9 @@ export default function HomePage() {
 
   // Therapist view
   if (userData.user.role === "therapist") {
+    const pendingInvites = invites.filter((i) => i.status === "pending");
+    const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+
     return (
       <>
         <div className="page">
@@ -105,21 +146,72 @@ export default function HomePage() {
               Hey, {userData.user.name.split(" ")[0]}!
             </h1>
             <p className="text-small" style={{ marginTop: "4px" }}>
-              Welcome back to your therapist dashboard.
+              Here&apos;s your overview for today.
             </p>
           </div>
 
-          <Link href="/therapist/patients" style={{ textDecoration: "none" }}>
-            <div className="card-interactive animate-in" style={{ animationDelay: "60ms", display: "flex", alignItems: "center", gap: "var(--space-md)" }}>
-              <div style={{ width: 52, height: 52, borderRadius: "var(--radius-xl)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Users size={26} color="var(--color-blue)" />
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: "var(--text-h3)" }}>Manage Patients</div>
-                <div className="text-small">Invite patients, view streaks & progress</div>
-              </div>
+          {/* Stats Row */}
+          <div className="animate-in" style={{ animationDelay: "60ms", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "var(--space-md)", marginBottom: "var(--space-xl)" }}>
+            <div className="card" style={{ textAlign: "center", padding: "var(--space-lg) var(--space-md)" }}>
+              <Users size={24} color="var(--color-blue)" style={{ margin: "0 auto var(--space-xs)" }} />
+              <div style={{ fontSize: "28px", fontWeight: 800 }}>{patients.length}</div>
+              <div className="text-tiny" style={{ color: "var(--color-gray-400)" }}>Patients</div>
             </div>
-          </Link>
+            <div className="card" style={{ textAlign: "center", padding: "var(--space-lg) var(--space-md)" }}>
+              <UserPlus size={24} color="var(--color-orange)" style={{ margin: "0 auto var(--space-xs)" }} />
+              <div style={{ fontSize: "28px", fontWeight: 800 }}>{pendingInvites.length}</div>
+              <div className="text-tiny" style={{ color: "var(--color-gray-400)" }}>Pending Invites</div>
+            </div>
+            <div className="card" style={{ textAlign: "center", padding: "var(--space-lg) var(--space-md)" }}>
+              <MessageCircle size={24} color="var(--color-primary)" style={{ margin: "0 auto var(--space-xs)" }} />
+              <div style={{ fontSize: "28px", fontWeight: 800 }}>{totalUnread}</div>
+              <div className="text-tiny" style={{ color: "var(--color-gray-400)" }}>Unread Messages</div>
+            </div>
+          </div>
+
+          <div className="home-grid">
+            {/* Messages Column */}
+            <section className="animate-in" style={{ animationDelay: "180ms" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-md)" }}>
+                <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Messages</h3>
+                <Link href="/messages" className="text-small" style={{ color: "var(--color-blue)", fontWeight: 600 }}>
+                  View All
+                </Link>
+              </div>
+              {conversations.length > 0 ? (
+                <div className="stack stack-sm">
+                  {conversations.slice(0, 5).map((c) => (
+                    <Link key={c.partnerId} href="/messages" style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}>
+                      <div className="card-interactive" style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", overflow: "hidden" }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--color-blue-light)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <User size={20} color="var(--color-blue)" />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontWeight: 700, fontSize: "var(--text-small)" }}>{c.partnerName}</span>
+                            {c.unreadCount > 0 && (
+                              <span style={{ backgroundColor: "var(--color-primary)", color: "white", fontSize: "11px", fontWeight: 700, borderRadius: "var(--radius-full)", minWidth: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+                                {c.unreadCount}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: "var(--text-small)", color: "var(--color-gray-400)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
+                            {c.lastMessage ? c.lastMessage.content : "No messages yet"}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
+                  <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
+                  <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
+                  <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>Messages with your patients will appear here.</p>
+                </div>
+              )}
+            </section>
+          </div>
         </div>
       </>
     );
@@ -526,7 +618,7 @@ export default function HomePage() {
                 <Link
                   key={c.partnerId}
                   href="/messages"
-                  style={{ textDecoration: "none", color: "inherit" }}
+                  style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}
                 >
                   <div
                     className="card-interactive animate-in"
@@ -534,6 +626,7 @@ export default function HomePage() {
                       display: "flex",
                       alignItems: "center",
                       gap: "var(--space-md)",
+                      overflow: "hidden",
                     }}
                   >
                     <div

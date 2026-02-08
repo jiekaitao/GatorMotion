@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, useCallback, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { UserPlus, X, Clock, Trash2 } from "lucide-react";
@@ -30,6 +30,21 @@ export default function TherapistPatientsPage() {
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
+  const refreshData = useCallback(async () => {
+    try {
+      const [pRes, iRes] = await Promise.all([
+        fetch("/api/patients"),
+        fetch("/api/invites"),
+      ]);
+      const pData = await pRes.json();
+      const iData = await iRes.json();
+      setPatients(pData.patients || []);
+      setInvites(iData.invites || []);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/patients").then((r) => r.json()),
@@ -48,6 +63,19 @@ export default function TherapistPatientsPage() {
       })
       .finally(() => setLoading(false));
   }, [router]);
+
+  // Auto-refresh when invite events happen (e.g. patient accepts from bell)
+  useEffect(() => {
+    const handler = () => refreshData();
+    window.addEventListener("invite-responded", handler);
+    return () => window.removeEventListener("invite-responded", handler);
+  }, [refreshData]);
+
+  // Poll for updates every 10 seconds (so PT side sees accepts from patient side)
+  useEffect(() => {
+    const interval = setInterval(refreshData, 10000);
+    return () => clearInterval(interval);
+  }, [refreshData]);
 
   async function handleSendInvite(e: FormEvent) {
     e.preventDefault();

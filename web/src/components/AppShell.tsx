@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import Image from "next/image";
@@ -15,12 +15,18 @@ interface StreakInfo {
 
 interface Notification {
   _id: string;
-  therapistName: string;
+  therapistName?: string;
+  patientUsername?: string;
+  senderName?: string;
+  senderId?: string;
+  messageCount?: number;
+  type: "invite" | "accepted" | "message";
   createdAt: string;
 }
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [avatarInitial, setAvatarInitial] = useState("");
   const [streakCount, setStreakCount] = useState<number | undefined>(undefined);
   const [streakInfo, setStreakInfo] = useState<StreakInfo | null>(null);
@@ -34,6 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const bellRef = useRef<HTMLDivElement>(null);
 
   // Always track the latest children
   pendingChildrenRef.current = children;
@@ -69,9 +76,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       .catch(() => {});
   }, []);
 
-  // Poll notification count every 5 seconds for patients
+  // Poll notification count every 5 seconds
   useEffect(() => {
-    if (userRole !== "patient") return;
+    if (!userRole) return;
 
     const poll = () => {
       fetch("/api/notifications?count=true")
@@ -86,6 +93,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [userRole]);
 
+  // Click-outside handler to close notification popover
+  useEffect(() => {
+    if (!showNotifications) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (bellRef.current && !bellRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showNotifications]);
+
   async function handleBellClick() {
     if (showNotifications) {
       setShowNotifications(false);
@@ -95,6 +114,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/notifications");
       const data = await res.json();
       setNotifications(data.notifications || []);
+      // For therapists, viewing clears the count (server marks as seen)
+      if (userRole === "therapist") {
+        setNotificationCount(0);
+      }
     } catch {
       setNotifications([]);
     }
@@ -115,6 +138,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/notifications?count=true");
       const data = await res.json();
       if (data.count !== undefined) setNotificationCount(data.count);
+      // Dispatch event so pages can instantly refetch
+      window.dispatchEvent(new CustomEvent("invite-responded"));
     } catch {
       // ignore
     }
@@ -138,7 +163,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const handleAnimationEnd = useCallback(() => {
     if (transitionState === "exiting") {
-      // Exit done — swap in the latest children and start enter animation
       setDisplayedChildren(pendingChildrenRef.current);
       setTransitionState("entering");
     } else if (transitionState === "entering") {
@@ -148,8 +172,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const showStreak = userRole !== "therapist";
 
-  const bellButton = userRole === "patient" && (
-    <div style={{ position: "relative" }}>
+  const bellButton = (
+    <div style={{ position: "relative" }} ref={bellRef}>
       <button
         onClick={handleBellClick}
         style={{
@@ -208,7 +232,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           {notifications.length === 0 ? (
             <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--color-gray-300)", fontSize: "14px" }}>
-              No pending invites
+              No new notifications
             </div>
           ) : (
             notifications.map((n) => (
@@ -222,27 +246,50 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   gap: 8,
                 }}
               >
-                <div style={{ fontSize: "14px" }}>
-                  <strong>{n.therapistName}</strong> wants to add you as a patient
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    className="btn btn-primary"
-                    style={{ padding: "4px 12px", fontSize: "12px", display: "flex", alignItems: "center", gap: 4 }}
-                    disabled={respondingTo === n._id}
-                    onClick={() => handleRespond(n._id, "accept")}
-                  >
-                    <Check size={14} /> Accept
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: "4px 12px", fontSize: "12px", display: "flex", alignItems: "center", gap: 4 }}
-                    disabled={respondingTo === n._id}
-                    onClick={() => handleRespond(n._id, "decline")}
-                  >
-                    <X size={14} /> Decline
-                  </button>
-                </div>
+                {n.type === "invite" && (
+                  <>
+                    <div style={{ fontSize: "14px" }}>
+                      <strong>{n.therapistName}</strong> wants to add you as a patient
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: "4px 12px", fontSize: "12px", display: "flex", alignItems: "center", gap: 4 }}
+                        disabled={respondingTo === n._id}
+                        onClick={() => handleRespond(n._id, "accept")}
+                      >
+                        <Check size={14} /> Accept
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "4px 12px", fontSize: "12px", display: "flex", alignItems: "center", gap: 4 }}
+                        disabled={respondingTo === n._id}
+                        onClick={() => handleRespond(n._id, "decline")}
+                      >
+                        <X size={14} /> Decline
+                      </button>
+                    </div>
+                  </>
+                )}
+                {n.type === "accepted" && (
+                  <div style={{ fontSize: "14px" }}>
+                    <strong>@{n.patientUsername}</strong> accepted your invite
+                  </div>
+                )}
+                {n.type === "message" && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ fontSize: "14px" }}>
+                      <strong>{n.senderName}</strong> sent {n.messageCount === 1 ? "a message" : `${n.messageCount} messages`}
+                    </div>
+                    <button
+                      className="btn btn-blue"
+                      style={{ padding: "4px 10px", fontSize: "12px", flexShrink: 0 }}
+                      onClick={() => { setShowNotifications(false); router.push("/messages"); }}
+                    >
+                      View
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getStreak, findUserById, getNotificationCount } from "@/lib/db-helpers";
+import { getStreak, findUserById, getNotificationCount, getTherapistNotificationCount } from "@/lib/db-helpers";
 
 export async function GET() {
   const session = await getSession();
@@ -16,6 +16,8 @@ export async function GET() {
     const user = await findUserById(session.userId);
     hasTherapist = (user?.therapistIds?.length ?? 0) > 0;
     notificationCount = await getNotificationCount(session.userId);
+  } else if (session.role === "therapist") {
+    notificationCount = await getTherapistNotificationCount(session.userId);
   }
 
   return NextResponse.json({
