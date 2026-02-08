@@ -1,10 +1,15 @@
 """
 FastAPI WebSocket server for real-time body tracking with MediaPipe.
 Receives base64-encoded JPEG frames, returns JSON landmark coordinates.
+
+Supports detector selection via query param: /ws/track?detect=pose,hands,face
+Runs selected detectors in parallel threads for maximum throughput.
 """
 
+import asyncio
 import base64
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import mediapipe as mp
@@ -40,6 +45,9 @@ POSE_LABELS = {
 }
 
 app = FastAPI(title="GatorMotion CV API")
+
+# Thread pool for parallel detection (MediaPipe releases GIL during inference)
+_executor = ThreadPoolExecutor(max_workers=3)
 
 # Landmarkers loaded at startup
 pose_landmarker: PoseLandmarker | None = None
@@ -107,6 +115,13 @@ def decode_frame(data: str) -> np.ndarray:
     return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
 
+def decode_frame_bytes(data: bytes) -> np.ndarray:
+    """Decode raw JPEG bytes into an RGB numpy array."""
+    arr = np.frombuffer(data, dtype=np.uint8)
+    bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+
+
 def extract_landmarks(result, landmark_attr: str = "pose_landmarks"):
     """Convert MediaPipe landmark results to plain dicts."""
     landmarks_list = getattr(result, landmark_attr, None)
@@ -129,32 +144,59 @@ def extract_landmarks(result, landmark_attr: str = "pose_landmarks"):
     return out
 
 
+async def _process_frame(rgb: np.ndarray, detectors: set[str]) -> dict:
+    """Run selected landmark detectors in parallel and return results."""
+    loop = asyncio.get_event_loop()
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+    # Launch selected detectors in parallel threads
+    futures = {}
+    if "pose" in detectors:
+        futures["pose"] = loop.run_in_executor(_executor, pose_landmarker.detect, mp_image)
+    if "hands" in detectors:
+        futures["hands"] = loop.run_in_executor(_executor, hand_landmarker.detect, mp_image)
+    if "face" in detectors:
+        futures["face"] = loop.run_in_executor(_executor, face_landmarker.detect, mp_image)
+
+    results = {}
+    for key, fut in futures.items():
+        results[key] = await fut
+
+    # Build response
+    pose_result = results.get("pose")
+    hand_result = results.get("hands")
+    face_result = results.get("face")
+
+    handedness = []
+    if hand_result and hand_result.handedness:
+        for h in hand_result.handedness:
+            handedness.append(h[0].category_name if h else None)
+
+    return {
+        "pose": extract_landmarks(pose_result, "pose_landmarks") if pose_result else [],
+        "hands": extract_landmarks(hand_result, "hand_landmarks") if hand_result else [],
+        "handedness": handedness,
+        "face": extract_landmarks(face_result, "face_landmarks") if face_result else [],
+    }
+
+
 @app.websocket("/ws/track")
 async def ws_track(websocket: WebSocket):
+    # Parse detector selection from query params: ?detect=pose,hands,face
+    detect_param = websocket.query_params.get("detect", "pose,hands,face")
+    detectors = {d.strip() for d in detect_param.split(",")}
+
     await websocket.accept()
     try:
         while True:
-            data = await websocket.receive_text()
+            msg = await websocket.receive()
 
-            rgb = decode_frame(data)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            if "bytes" in msg and msg["bytes"]:
+                rgb = decode_frame_bytes(msg["bytes"])
+            else:
+                rgb = decode_frame(msg.get("text", ""))
 
-            pose_result = pose_landmarker.detect(mp_image)
-            hand_result = hand_landmarker.detect(mp_image)
-            face_result = face_landmarker.detect(mp_image)
-
-            handedness = []
-            if hand_result.handedness:
-                for h in hand_result.handedness:
-                    handedness.append(h[0].category_name if h else None)
-
-            response = {
-                "pose": extract_landmarks(pose_result, "pose_landmarks"),
-                "hands": extract_landmarks(hand_result, "hand_landmarks"),
-                "handedness": handedness,
-                "face": extract_landmarks(face_result, "face_landmarks"),
-            }
-
+            response = await _process_frame(rgb, detectors)
             await websocket.send_json(response)
     except WebSocketDisconnect:
         pass

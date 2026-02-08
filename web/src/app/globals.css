@@ -636,13 +636,13 @@ a { color: var(--color-blue); text-decoration: none; }
 /* Two-column dashboard grid: stacks on mobile, side-by-side on desktop */
 .home-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-xl);
 }
 
 @media (min-width: 768px) {
   .home-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
   }
   .home-grid-full {

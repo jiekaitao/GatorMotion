@@ -8,3 +8,9 @@ services:
       - ./web/public:/app/public
     environment:
       - WATCHPACK_POLLING=true
+
+  cv-api:
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cv_backend/main.py:/app/main.py

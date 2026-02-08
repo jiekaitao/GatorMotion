@@ -121,7 +121,7 @@ export default function MessagesPage() {
   if (activeChat) {
     return (
       <>
-        <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 60px)", maxHeight: "calc(100vh - 60px)" }}>
+        <div style={{ display: "flex", flexDirection: "column", height: "calc(100dvh - 120px)", maxHeight: "calc(100dvh - 120px)" }}>
           {/* Chat Header */}
           <div
             style={{

@@ -612,88 +612,90 @@ export default function HomePage() {
             <h3 style={{ fontSize: "var(--text-h2)", fontWeight: 800 }}>Conversations</h3>
           </div>
 
-          {conversations.length > 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
-              {conversations.map((c) => (
-                <Link
-                  key={c.partnerId}
-                  href="/messages"
-                  style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}
-                >
-                  <div
-                    className="card-interactive animate-in"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--space-md)",
-                      overflow: "hidden",
-                    }}
+          <div className="card" style={{ padding: "var(--space-xl)" }}>
+            {conversations.length > 0 ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-sm)" }}>
+                {conversations.map((c) => (
+                  <Link
+                    key={c.partnerId}
+                    href="/messages"
+                    style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}
                   >
                     <div
+                      className="card-interactive animate-in"
                       style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: "var(--radius-full)",
-                        backgroundColor: "var(--color-blue-light)",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0,
+                        gap: "var(--space-md)",
+                        overflow: "hidden",
                       }}
                     >
-                      <User size={22} color="var(--color-blue)" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontWeight: 700 }}>{c.partnerName}</span>
-                        {c.unreadCount > 0 && (
-                          <span
-                            style={{
-                              backgroundColor: "var(--color-primary)",
-                              color: "white",
-                              fontSize: "12px",
-                              fontWeight: 700,
-                              borderRadius: "var(--radius-full)",
-                              minWidth: 22,
-                              height: 22,
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              padding: "0 6px",
-                            }}
-                          >
-                            {c.unreadCount}
-                          </span>
-                        )}
-                      </div>
                       <div
                         style={{
-                          fontSize: "var(--text-small)",
-                          color: "var(--color-gray-400)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          marginTop: 2,
+                          width: 44,
+                          height: 44,
+                          borderRadius: "var(--radius-full)",
+                          backgroundColor: "var(--color-blue-light)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
                         }}
                       >
-                        {c.lastMessage
-                          ? c.lastMessage.content
-                          : "No messages yet — tap to start"}
+                        <User size={22} color="var(--color-blue)" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: 700 }}>{c.partnerName}</span>
+                          {c.unreadCount > 0 && (
+                            <span
+                              style={{
+                                backgroundColor: "var(--color-primary)",
+                                color: "white",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                borderRadius: "var(--radius-full)",
+                                minWidth: 22,
+                                height: 22,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "0 6px",
+                              }}
+                            >
+                              {c.unreadCount}
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "var(--text-small)",
+                            color: "var(--color-gray-400)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            marginTop: 2,
+                          }}
+                        >
+                          {c.lastMessage
+                            ? c.lastMessage.content
+                            : "No messages yet — tap to start"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <div className="card text-center" style={{ padding: "var(--space-xl)" }}>
-              <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
-              <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
-              <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>
-                Your therapist will appear here once they message you.
-              </p>
-            </div>
-          )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center">
+                <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
+                <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
+                <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>
+                  Your therapist will appear here once they message you.
+                </p>
+              </div>
+            )}
+          </div>
         </section>
 
         </div>{/* end right column */}

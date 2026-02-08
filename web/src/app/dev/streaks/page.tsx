@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import StreakFlame from "@/components/StreakFlame";
 
 interface StreakInfo {
@@ -63,6 +65,9 @@ export default function DevStreaksPage() {
   return (
     <>
       <div className="page">
+        <Link href="/dev" style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--color-gray-400)", textDecoration: "none", fontSize: "var(--text-small)", fontWeight: 600, marginBottom: "var(--space-sm)" }}>
+          <ChevronLeft size={18} /> Back to Dev Panel
+        </Link>
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Streaks</h1>
         {/* Current user streak */}
         {streak && (

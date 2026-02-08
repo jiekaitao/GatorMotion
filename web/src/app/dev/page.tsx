@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { Database, Flame, Dumbbell, Users, ClipboardList, Mail } from "lucide-react";
+import { Database, Flame, Dumbbell, Users, ClipboardList, Mail, ScanEye } from "lucide-react";
 
 interface Stats {
   counts: { users: number; exercises: number; assignments: number; streaks: number };
@@ -26,6 +26,7 @@ export default function DevDashboard() {
     { href: "/dev/assignments", label: "Assignments", icon: ClipboardList, desc: "Create/view assignments" },
     { href: "/dev/users", label: "Users", icon: Users, desc: "View registered users" },
     { href: "/dev/invites", label: "Invites", icon: Mail, desc: "Create/manage patient invites" },
+    { href: "/dev/cv-test", label: "CV Test", icon: ScanEye, desc: "Live webcam body tracking" },
   ];
 
   return (

@@ -29,6 +29,7 @@ export default function TherapistPatientsPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
 
   const refreshData = useCallback(async () => {
     try {
@@ -150,9 +151,26 @@ export default function TherapistPatientsPage() {
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>My Patients</h1>
         {/* Invite Form */}
         <div className="card animate-in" style={{ marginBottom: "var(--space-lg)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)", marginBottom: "var(--space-md)" }}>
-            <UserPlus size={20} color="var(--color-blue)" />
-            <h3 style={{ fontWeight: 700 }}>Invite a Patient</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-md)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+              <UserPlus size={20} color="var(--color-blue)" />
+              <h3 style={{ fontWeight: 700 }}>Invite a Patient</h3>
+            </div>
+            <button
+                onClick={() => setShowHistory(true)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--color-blue)",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                  padding: 0,
+                }}
+              >
+                View Invite History
+              </button>
           </div>
           <form onSubmit={handleSendInvite} style={{ display: "flex", gap: "var(--space-sm)" }}>
             <input
@@ -245,29 +263,74 @@ export default function TherapistPatientsPage() {
           )}
         </div>
 
-        {/* Past Invites */}
-        {pastInvites.length > 0 && (
-          <div className="animate-in" style={{ animationDelay: "180ms", marginTop: "var(--space-lg)" }}>
-            <h3 style={{ color: "var(--color-gray-400)", marginBottom: "var(--space-sm)", fontWeight: 600 }}>
-              Past Invites
-            </h3>
-            <div className="stack stack-sm">
-              {pastInvites.map((inv) => (
-                <div key={inv._id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", opacity: 0.6 }}>
-                  <div className="text-small">{inv.patientUsername}</div>
-                  <div className="badge" style={{
-                    backgroundColor: inv.status === "accepted" ? "var(--color-primary-light)" : "var(--color-gray-100)",
-                    color: inv.status === "accepted" ? "var(--color-primary-dark)" : "var(--color-gray-400)",
-                  }}>
-                    {inv.status}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
+      {/* Invite History Modal */}
+      {showHistory && (
+        <div
+          onClick={() => setShowHistory(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "var(--space-md)",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "var(--color-surface)",
+              borderRadius: "var(--radius-lg)",
+              width: "100%",
+              maxWidth: 480,
+              maxHeight: "70vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "var(--space-md) var(--space-lg)" }}>
+              <h3 style={{ fontWeight: 700 }}>Invite History</h3>
+              <button
+                onClick={() => setShowHistory(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-gray-400)", padding: 4 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ overflowY: "auto", padding: "0 var(--space-lg) var(--space-lg)" }}>
+              {pastInvites.length > 0 ? (
+                <div className="stack stack-sm">
+                  {pastInvites.map((inv) => (
+                    <div key={inv._id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid var(--color-gray-100)" }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "var(--text-small)" }}>{inv.patientUsername}</div>
+                        <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>
+                          {new Date(inv.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className="badge" style={{
+                        backgroundColor: inv.status === "accepted" ? "var(--color-primary-light)" : "var(--color-gray-100)",
+                        color: inv.status === "accepted" ? "var(--color-primary-dark)" : "var(--color-gray-400)",
+                      }}>
+                        {inv.status}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: "var(--color-gray-300)", textAlign: "center", padding: "var(--space-lg) 0" }}>
+                  No past invites yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

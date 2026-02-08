@@ -2,7 +2,8 @@
 
 import { useEffect, useState, FormEvent } from "react";
 
-import { CheckCircle2, Circle } from "lucide-react";
+import Link from "next/link";
+import { ChevronLeft, CheckCircle2, Circle } from "lucide-react";
 
 interface Exercise {
   _id: string;
@@ -98,6 +99,9 @@ export default function DevAssignmentsPage() {
   return (
     <>
       <div className="page">
+        <Link href="/dev" style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--color-gray-400)", textDecoration: "none", fontSize: "var(--text-small)", fontWeight: 600, marginBottom: "var(--space-sm)" }}>
+          <ChevronLeft size={18} /> Back to Dev Panel
+        </Link>
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Assignments</h1>
         {/* Create Assignment */}
         <form onSubmit={handleAssign} className="card animate-in" style={{ marginBottom: "var(--space-lg)" }}>

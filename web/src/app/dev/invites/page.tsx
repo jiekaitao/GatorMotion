@@ -11,6 +11,9 @@ interface Invite {
   createdAt: string;
 }
 
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+
 export default function DevInvitesPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [username, setUsername] = useState("");
@@ -62,6 +65,9 @@ export default function DevInvitesPage() {
   return (
     <>
       <div className="page">
+        <Link href="/dev" style={{ display: "inline-flex", alignItems: "center", gap: "4px", color: "var(--color-gray-400)", textDecoration: "none", fontSize: "var(--text-small)", fontWeight: 600, marginBottom: "var(--space-sm)" }}>
+          <ChevronLeft size={18} /> Back to Dev Panel
+        </Link>
         <h1 style={{ fontSize: "var(--text-h1)", fontWeight: 800, marginBottom: "var(--space-lg)" }}>Dev: Invites</h1>
         <div className="badge badge-orange animate-in" style={{ marginBottom: "var(--space-lg)" }}>
           Development Only
