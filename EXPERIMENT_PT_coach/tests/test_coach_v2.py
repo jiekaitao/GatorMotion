@@ -124,6 +124,58 @@ class TestV2Matching:
         assert len(p_tight["coaching"]) >= len(p_loose["coaching"])
 
 
+class TestRMSTracking:
+    def test_rms_history_tracks_over_time(self):
+        """RMS history should accumulate timestamped divergence values."""
+        engine = _engine()
+        frames = _load_frames()
+
+        # Process frames with timestamps
+        for i in range(min(20, len(frames))):
+            ts_sec = float(i) * 0.1  # 10 Hz
+            engine.infer(frames[i], timestamp_sec=ts_sec)
+
+        assert len(engine.rms_history) == min(20, len(frames))
+
+        # Check timestamps are monotonic
+        times = [t for t, _ in engine.rms_history]
+        assert all(times[i] <= times[i+1] for i in range(len(times) - 1))
+
+        # Check all RMS values are non-negative
+        rms_vals = [r for _, r in engine.rms_history]
+        assert all(r >= 0.0 for r in rms_vals)
+
+    def test_rms_history_respects_maxlen(self):
+        """RMS history should be bounded to maxlen."""
+        engine = _engine()
+        frames = _load_frames()
+
+        # Fill beyond maxlen (300)
+        for i in range(350):
+            ts_sec = float(i) * 0.033  # 30 Hz
+            frame_idx = i % len(frames)
+            engine.infer(frames[frame_idx], timestamp_sec=ts_sec)
+
+        assert len(engine.rms_history) == 300, f"Expected 300, got {len(engine.rms_history)}"
+
+        # Check oldest data was dropped (times should start from ~1.65s, not 0)
+        first_ts = engine.rms_history[0][0]
+        assert first_ts > 1.0, f"Oldest timestamp should be > 1.0s, got {first_ts:.2f}"
+
+    def test_perfect_replay_shows_improvement(self):
+        """Perfect replay should show consistently low RMS (no drift over time)."""
+        engine = _engine()
+        frames = _load_frames()
+
+        for i in range(len(frames)):
+            ts_sec = float(i) / 15.0  # 15 fps
+            engine.infer(frames[i], timestamp_sec=ts_sec)
+
+        # All RMS values should be near zero (< 0.01)
+        rms_vals = [r for _, r in engine.rms_history]
+        assert all(r < 0.01 for r in rms_vals), f"Perfect replay had high RMS: {max(rms_vals):.3f}"
+
+
 class TestProcrustes:
     def test_rotation_invariance(self):
         """Rotating the user's entire pose should NOT increase divergence significantly.

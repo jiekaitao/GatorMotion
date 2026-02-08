@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for rendering to numpy
+import matplotlib.pyplot as plt
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import BaseOptions
@@ -85,6 +88,10 @@ class CoachV2Engine:
         # Quality smoothing
         self.quality_hist: deque[float] = deque(maxlen=12)
 
+        # RMS history for graphing improvement over time
+        # Store (timestamp_sec, rms_divergence) tuples
+        self.rms_history: deque[tuple[float, float]] = deque(maxlen=300)  # ~10 sec @ 30fps
+
         # Rep counting
         self.rep_count = 0
         self.rep_state = "standing"
@@ -124,8 +131,12 @@ class CoachV2Engine:
             dirs.append("down" if dy > 0 else "up")
         return " and ".join(dirs) if dirs else "closer"
 
-    def infer(self, landmarks_xyzw: np.ndarray) -> dict[str, Any]:
+    def infer(self, landmarks_xyzw: np.ndarray, timestamp_sec: float | None = None) -> dict[str, Any]:
         """Run inference on a single frame.
+
+        Args:
+            landmarks_xyzw: 33x4 array of landmarks (x, y, z, visibility)
+            timestamp_sec: Optional timestamp in seconds for RMS history tracking
 
         Returns a payload with: matched reference, per-joint divergences,
         quality score, coaching messages.
@@ -230,6 +241,10 @@ class CoachV2Engine:
                 })
 
         rms_div = math.sqrt(total_div_sq / max(1, n_visible))
+
+        # Track RMS over time for graphing
+        if timestamp_sec is not None:
+            self.rms_history.append((float(timestamp_sec), float(rms_div)))
 
         # Sort coaching by divergence (worst first)
         coaching.sort(key=lambda c: c["divergence"], reverse=True)
@@ -371,6 +386,72 @@ def draw_divergence_lines(
                         cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1, cv2.LINE_AA)
 
 
+def render_rms_graph(rms_history: deque[tuple[float, float]], threshold: float, width: int = 600, height: int = 300) -> np.ndarray:
+    """Render a time-series graph of RMS divergence showing improvement over time.
+
+    Args:
+        rms_history: deque of (timestamp_sec, rms_divergence) tuples
+        threshold: Coaching threshold to draw as reference line
+        width: Graph width in pixels
+        height: Graph height in pixels
+
+    Returns:
+        BGR image of the graph
+    """
+    if len(rms_history) < 2:
+        # Not enough data — return blank graph
+        blank = np.zeros((height, width, 3), dtype=np.uint8)
+        blank[:] = (18, 18, 22)
+        cv2.putText(blank, "Collecting RMS data...", (width // 4, height // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (180, 180, 180), 2, cv2.LINE_AA)
+        return blank
+
+    # Extract timestamps and RMS values
+    times = np.array([t for t, _ in rms_history], dtype=np.float64)
+    rms_vals = np.array([r for _, r in rms_history], dtype=np.float64)
+
+    # Relative time (start at 0)
+    times = times - times[0]
+
+    # Create matplotlib figure
+    fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
+    fig.patch.set_facecolor('#121216')
+    ax.set_facecolor('#1a1a1e')
+
+    # Plot RMS over time
+    ax.plot(times, rms_vals, color='#02caca', linewidth=2.5, label='RMS Divergence')
+
+    # Threshold line
+    ax.axhline(y=threshold, color='#ff6b6b', linestyle='--', linewidth=2, alpha=0.7, label='Coaching Threshold')
+
+    # Moving average (smoothed trend)
+    if len(rms_vals) >= 10:
+        window = min(30, len(rms_vals) // 3)
+        smoothed = np.convolve(rms_vals, np.ones(window) / window, mode='valid')
+        smooth_times = times[window // 2 : len(smoothed) + window // 2]
+        ax.plot(smooth_times, smoothed, color='#58CC02', linewidth=2, alpha=0.8, label='Trend (smoothed)')
+
+    # Styling
+    ax.set_xlabel('Time (seconds)', color='#e0e0e0', fontsize=11, fontweight='bold')
+    ax.set_ylabel('RMS Divergence', color='#e0e0e0', fontsize=11, fontweight='bold')
+    ax.set_title('Form Quality Over Time', color='#02caca', fontsize=13, fontweight='bold', pad=12)
+    ax.tick_params(colors='#c0c0c0', labelsize=9)
+    ax.grid(True, alpha=0.15, color='#606060')
+    ax.legend(loc='upper right', fontsize=9, framealpha=0.9, facecolor='#2a2a2e', edgecolor='#404040', labelcolor='#e0e0e0')
+
+    # Tight layout
+    fig.tight_layout(pad=1.5)
+
+    # Render to numpy array
+    fig.canvas.draw()
+    buf = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
+    buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+    bgr = cv2.cvtColor(buf, cv2.COLOR_RGBA2BGR)
+    plt.close(fig)
+
+    return bgr
+
+
 def render_info_panel(frame: np.ndarray, payload: dict[str, Any], threshold: float) -> np.ndarray:
     """Render a side panel with loss breakdown and coaching messages."""
     h, w = frame.shape[:2]
@@ -503,12 +584,14 @@ def main() -> None:
         while True:
             landmarks_xyzw = None
             frame = None
+            current_ts_sec = time.time() - start_ts  # Relative timestamp in seconds
 
             if args.source_json:
                 if replay_idx >= len(replay_frames):
                     break
                 landmarks_xyzw = replay_frames[replay_idx]
                 ts_ms = int(replay_idx * (1000.0 / replay_fps))
+                current_ts_sec = replay_idx / replay_fps  # Use simulated time for replay
                 replay_idx += 1
                 frame = np.zeros((720, 960, 3), dtype=np.uint8)
             else:
@@ -536,7 +619,7 @@ def main() -> None:
                     break
                 continue
 
-            payload = engine.infer(landmarks_xyzw)
+            payload = engine.infer(landmarks_xyzw, timestamp_sec=current_ts_sec)
             json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
             if args.print_every > 0 and frame_count % args.print_every == 0:
@@ -559,6 +642,12 @@ def main() -> None:
                 # 4. Side panel
                 composed = render_info_panel(frame, payload, engine.coach_threshold)
                 cv2.imshow("PT Coach v2", composed)
+
+                # 5. RMS over time graph (separate window)
+                if len(engine.rms_history) >= 2:
+                    rms_graph = render_rms_graph(engine.rms_history, engine.coach_threshold)
+                    cv2.imshow("RMS Over Time - Improvement Tracker", rms_graph)
+
                 if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
                     break
 

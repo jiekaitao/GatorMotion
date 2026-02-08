@@ -8,6 +8,9 @@ Supported exercises:
 - `leg_abduction` (Ex4)
 - `squat` (Ex6)
 
+## Two Coaching Engines
+
+### v1: Temporal Alignment (live_coach.py)
 Core behavior:
 - Real-time MediaPipe pose inference (33 landmarks)
 - Temporal phase alignment of user motion to reference motion (`temporal_window_mse`)
@@ -15,6 +18,24 @@ Core behavior:
 - On-frame vectors/arrows to target joint positions (only when landmark is reliably detected)
 - Looped reference wireframe demo that snaps to best-fit phase and pulses on snap
 - Live JSON state output for frontend integration
+
+### v2: Divergence-Based with RMS Tracking (live_coach_v2.py) ⭐ **Recommended**
+Simpler, more robust approach:
+- **Skeleton Overlay**: Green user skeleton + orange ghost reference (Procrustes-aligned)
+- **Divergence Visualization**: Colored line segments from user to reference joints (green=close, red=far)
+- **Rotation-Invariant**: Uses Procrustes alignment (SVD-based optimal rotation) before measuring divergence
+- **Threshold-Based Coaching**: Only coach when joint divergence > threshold (default 0.12 body-frame units ≈ 4cm)
+- **RMS Over Time Graph**: Live time-series showing improvement as user responds to coaching
+  - Tracks RMS divergence with timestamps
+  - Shows smoothed trend line (30-frame moving average)
+  - Displays coaching threshold as reference line
+  - Demonstrates user improvement in real-time
+
+**Why v2?**
+- No temporal windowing, EMA, or hysteresis → simpler, more predictable
+- Direct visual feedback (see exactly where to move)
+- Rotation-invariant comparison (turning body doesn't break alignment)
+- Real-time improvement tracking to motivate users
 
 ## 1) What this system is mathematically doing
 
@@ -272,7 +293,7 @@ Train all models:
 python3 train_all_models.py
 ```
 
-Run one exercise:
+Run one exercise (v1 - temporal alignment):
 ```bash
 python3 live_coach.py --exercise squat --camera 0 --mirror
 ```
@@ -290,7 +311,21 @@ Quick script wrapper:
 ./run_demo.sh leg_abduction
 ```
 
-Headless replay test:
+**Run v2 engine (recommended - with RMS tracking):**
+```bash
+python3 live_coach_v2.py --exercise squat --camera 0 --mirror
+```
+
+This will open two windows:
+1. **Main window**: User skeleton (green) + reference ghost (orange) + divergence lines + coaching panel
+2. **RMS Over Time window**: Live graph showing improvement as user responds to coaching
+
+Adjust coaching threshold (higher = less sensitive):
+```bash
+python3 live_coach_v2.py --exercise squat --camera 0 --mirror --threshold 0.15
+```
+
+Headless replay test (v1):
 ```bash
 python3 live_coach.py \
   --exercise squat \
@@ -301,15 +336,34 @@ python3 live_coach.py \
   --max-frames 120
 ```
 
+Headless replay test (v2):
+```bash
+python3 live_coach_v2.py \
+  --exercise squat \
+  --source-json data/raw/squat_reference.json \
+  --no-window \
+  --max-frames 120
+```
+
 ## 15) Tuning knobs
 
-Most useful runtime knob:
+**v1 (live_coach.py):**
 - `--align-snap-threshold` controls snap aggressiveness for demo loop.
 
 Key hardcoded tuning values in `live_coach.py` (inside `PTCoachEngine.__init__`):
 - correction activation/clear thresholds
 - arrow EMA smoothing
 - temporal window size and alignment length
+
+**v2 (live_coach_v2.py):**
+- `--threshold` controls coaching sensitivity (default 0.12 body-frame units ≈ 4cm)
+
+Key hardcoded tuning values in `live_coach_v2.py` (inside `CoachV2Engine.__init__`):
+- `rms_history.maxlen = 300` — how many frames to track for the improvement graph (~10 sec @ 30fps)
+- Graph parameters in `render_rms_graph()`:
+  - `width`, `height` — graph dimensions
+  - Moving average window size (default 30 frames for trend line)
+  - Color scheme (teal for RMS, green for trend, red for threshold)
 
 ## 16) Current limitations
 
