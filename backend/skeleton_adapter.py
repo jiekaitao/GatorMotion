@@ -7,20 +7,31 @@ from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 import cv2
 import numpy as np
 
-# MediaPipe Pose index mapping used by webcam mode.
+# MediaPipe Pose index mapping – expanded to cover head, hands, and feet.
 MEDIAPIPE_INDEX_BY_JOINT: Dict[str, int] = {
+    "nose": 0,
     "left_shoulder": 11,
     "right_shoulder": 12,
     "left_elbow": 13,
     "right_elbow": 14,
     "left_wrist": 15,
     "right_wrist": 16,
+    "left_pinky": 17,
+    "right_pinky": 18,
+    "left_index": 19,
+    "right_index": 20,
+    "left_thumb": 21,
+    "right_thumb": 22,
     "left_hip": 23,
     "right_hip": 24,
     "left_knee": 25,
     "right_knee": 26,
     "left_ankle": 27,
     "right_ankle": 28,
+    "left_heel": 29,
+    "right_heel": 30,
+    "left_foot_index": 31,
+    "right_foot_index": 32,
 }
 
 
@@ -346,6 +357,18 @@ def adapt_ios_payload(
     for joint_name, coords in joints_3d.items():
         all_joints_3d.setdefault(joint_name, coords)
 
+    # Derive synthetic joints from the incoming data.
+    if "left_hip" in joints_3d and "right_hip" in joints_3d:
+        lh, rh = joints_3d["left_hip"], joints_3d["right_hip"]
+        joints_3d.setdefault("root", (
+            (lh[0] + rh[0]) / 2.0, (lh[1] + rh[1]) / 2.0, (lh[2] + rh[2]) / 2.0,
+        ))
+    if "left_shoulder" in joints_3d and "right_shoulder" in joints_3d:
+        ls, rs = joints_3d["left_shoulder"], joints_3d["right_shoulder"]
+        joints_3d.setdefault("neck", (
+            (ls[0] + rs[0]) / 2.0, (ls[1] + rs[1]) / 2.0, (ls[2] + rs[2]) / 2.0,
+        ))
+
     default_keypoints_2d = _project_to_normalized_2d(joints_3d)
     payload_keypoints_2d = _parse_keypoints_2d(payload)
     keypoints_2d = dict(default_keypoints_2d)
@@ -423,6 +446,19 @@ def adapt_mediapipe_pose_landmarks(
         keypoints_2d["root"] = (
             (keypoints_2d["left_hip"][0] + keypoints_2d["right_hip"][0]) / 2.0,
             (keypoints_2d["left_hip"][1] + keypoints_2d["right_hip"][1]) / 2.0,
+        )
+
+    if "left_shoulder" in joints_3d and "right_shoulder" in joints_3d:
+        ls = joints_3d["left_shoulder"]
+        rs = joints_3d["right_shoulder"]
+        joints_3d["neck"] = (
+            (ls[0] + rs[0]) / 2.0,
+            (ls[1] + rs[1]) / 2.0,
+            (ls[2] + rs[2]) / 2.0,
+        )
+        keypoints_2d["neck"] = (
+            (keypoints_2d["left_shoulder"][0] + keypoints_2d["right_shoulder"][0]) / 2.0,
+            (keypoints_2d["left_shoulder"][1] + keypoints_2d["right_shoulder"][1]) / 2.0,
         )
 
     return SkeletonFrame(

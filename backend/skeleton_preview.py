@@ -13,21 +13,44 @@ except Exception:  # pragma: no cover - optional at runtime
     mp = None
 
 SKELETON_CONNECTIONS: Tuple[Tuple[str, str], ...] = (
+    # Torso
     ("left_shoulder", "right_shoulder"),
-    ("left_shoulder", "left_elbow"),
-    ("left_elbow", "left_wrist"),
-    ("right_shoulder", "right_elbow"),
-    ("right_elbow", "right_wrist"),
     ("left_shoulder", "left_hip"),
     ("right_shoulder", "right_hip"),
     ("left_hip", "right_hip"),
+    # Head
+    ("nose", "left_shoulder"),
+    ("nose", "right_shoulder"),
+    # Left arm
+    ("left_shoulder", "left_elbow"),
+    ("left_elbow", "left_wrist"),
+    ("left_wrist", "left_pinky"),
+    ("left_wrist", "left_index"),
+    ("left_wrist", "left_thumb"),
+    ("left_index", "left_pinky"),
+    # Right arm
+    ("right_shoulder", "right_elbow"),
+    ("right_elbow", "right_wrist"),
+    ("right_wrist", "right_pinky"),
+    ("right_wrist", "right_index"),
+    ("right_wrist", "right_thumb"),
+    ("right_index", "right_pinky"),
+    # Left leg
     ("left_hip", "left_knee"),
     ("left_knee", "left_ankle"),
+    ("left_ankle", "left_heel"),
+    ("left_ankle", "left_foot_index"),
+    ("left_heel", "left_foot_index"),
+    # Right leg
     ("right_hip", "right_knee"),
     ("right_knee", "right_ankle"),
+    ("right_ankle", "right_heel"),
+    ("right_ankle", "right_foot_index"),
+    ("right_heel", "right_foot_index"),
 )
 
 DEPTH_JOINT_ORDER: Tuple[str, ...] = (
+    "nose",
     "root",
     "left_shoulder",
     "right_shoulder",
@@ -35,16 +58,27 @@ DEPTH_JOINT_ORDER: Tuple[str, ...] = (
     "right_elbow",
     "left_wrist",
     "right_wrist",
+    "left_pinky",
+    "right_pinky",
+    "left_index",
+    "right_index",
+    "left_thumb",
+    "right_thumb",
     "left_hip",
     "right_hip",
     "left_knee",
     "right_knee",
     "left_ankle",
     "right_ankle",
+    "left_heel",
+    "right_heel",
+    "left_foot_index",
+    "right_foot_index",
 )
 
 DISTANCE_METRIC_ORDER: Tuple[Tuple[str, str], ...] = (
     ("arm_head_distance_m", "Arm-head dist"),
+    ("head_to_neck_m", "Head-neck"),
     ("left_upper_arm_length_m", "L upper arm"),
     ("right_upper_arm_length_m", "R upper arm"),
     ("left_forearm_length_m", "L forearm"),
@@ -55,6 +89,8 @@ DISTANCE_METRIC_ORDER: Tuple[Tuple[str, str], ...] = (
     ("right_shin_length_m", "R shin"),
     ("left_side_body_length_m", "L torso side"),
     ("right_side_body_length_m", "R torso side"),
+    ("left_foot_length_m", "L foot"),
+    ("right_foot_length_m", "R foot"),
     ("shoulder_width_m", "Shoulder width"),
     ("hip_width_m", "Hip width"),
     ("stance_width_m", "Stance width"),

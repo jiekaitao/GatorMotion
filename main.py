@@ -79,6 +79,33 @@ def _distance_3d(
     return math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
 
 
+def _joint_distance_from_frame(frame: SkeletonFrame, joint_name: str) -> Optional[float]:
+    camera_point = frame.camera_points_3d.get(joint_name)
+    if camera_point is not None:
+        depth = float(camera_point[2])
+        if depth > 0.0 and math.isfinite(depth):
+            return depth
+
+    depth = frame.point_depths_m.get(joint_name)
+    if depth is not None:
+        depth_f = float(depth)
+        if depth_f > 0.0 and math.isfinite(depth_f):
+            return depth_f
+
+    # Fallback: camera-to-joint world distance when per-joint LiDAR depth is unavailable.
+    camera_position = frame.camera_position
+    joint_world = frame.joints_3d.get(joint_name)
+    if camera_position is None or joint_world is None:
+        return None
+    dx = float(joint_world[0] - camera_position[0])
+    dy = float(joint_world[1] - camera_position[1])
+    dz = float(joint_world[2] - camera_position[2])
+    distance_m = math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
+    if distance_m <= 0.0 or not math.isfinite(distance_m):
+        return None
+    return distance_m
+
+
 @dataclass
 class ArmMotionState:
     filtered_rel_depth_m: Optional[float] = None
@@ -97,37 +124,18 @@ class ArmDepthMotionDetector:
         self.velocity_deadband_mps = config.ARM_DEPTH_VELOCITY_DEADBAND_MPS
         self.min_half_cycle_amplitude_m = config.ARM_DEPTH_HALF_CYCLE_MIN_AMPLITUDE_M
         self.min_half_cycle_duration_sec = config.ARM_DEPTH_HALF_CYCLE_MIN_DURATION_SEC
-        self.states: Dict[str, ArmMotionState] = {
+        self.arm_states: Dict[str, ArmMotionState] = {
+            "left": ArmMotionState(),
+            "right": ArmMotionState(),
+        }
+        self.leg_states: Dict[str, ArmMotionState] = {
             "left": ArmMotionState(),
             "right": ArmMotionState(),
         }
 
     @staticmethod
     def _joint_depth_from_frame(frame: SkeletonFrame, joint_name: str) -> Optional[float]:
-        camera_point = frame.camera_points_3d.get(joint_name)
-        if camera_point is not None:
-            depth = float(camera_point[2])
-            if depth > 0.0 and math.isfinite(depth):
-                return depth
-        depth = frame.point_depths_m.get(joint_name)
-        if depth is not None:
-            depth_f = float(depth)
-            if depth_f > 0.0 and math.isfinite(depth_f):
-                return depth_f
-
-        # Fallback: compute camera-to-joint distance in world space when LiDAR
-        # point depth is unavailable for this joint.
-        camera_position = frame.camera_position
-        joint_world = frame.joints_3d.get(joint_name)
-        if camera_position is None or joint_world is None:
-            return None
-        dx = float(joint_world[0] - camera_position[0])
-        dy = float(joint_world[1] - camera_position[1])
-        dz = float(joint_world[2] - camera_position[2])
-        distance_m = math.sqrt((dx * dx) + (dy * dy) + (dz * dz))
-        if distance_m <= 0.0 or not math.isfinite(distance_m):
-            return None
-        return distance_m
+        return _joint_distance_from_frame(frame, joint_name)
 
     @classmethod
     def _arm_distance_for_side(cls, frame: SkeletonFrame, side: str) -> Optional[float]:
@@ -143,6 +151,24 @@ class ArmDepthMotionDetector:
             shoulder_depth = cls._joint_depth_from_frame(frame, shoulder_name)
             if shoulder_depth is not None:
                 distance_candidates.append(shoulder_depth)
+        if not distance_candidates:
+            return None
+        return float(sum(distance_candidates) / float(len(distance_candidates)))
+
+    @classmethod
+    def _leg_distance_for_side(cls, frame: SkeletonFrame, side: str) -> Optional[float]:
+        hip_name = f"{side}_hip"
+        knee_name = f"{side}_knee"
+        ankle_name = f"{side}_ankle"
+        distance_candidates: list[float] = []
+        for joint_name in (ankle_name, knee_name):
+            joint_depth = cls._joint_depth_from_frame(frame, joint_name)
+            if joint_depth is not None:
+                distance_candidates.append(joint_depth)
+        if not distance_candidates:
+            hip_depth = cls._joint_depth_from_frame(frame, hip_name)
+            if hip_depth is not None:
+                distance_candidates.append(hip_depth)
         if not distance_candidates:
             return None
         return float(sum(distance_candidates) / float(len(distance_candidates)))
@@ -211,7 +237,7 @@ class ArmDepthMotionDetector:
             arm_distance_m = self._arm_distance_for_side(frame, side)
             if arm_distance_m is None:
                 continue
-            state = self.states[side]
+            state = self.arm_states[side]
             direction_sign = self._update_state(state, arm_distance_m, frame.timestamp)
             filtered_distance = float(state.filtered_rel_depth_m or arm_distance_m)
             velocity = float(state.last_velocity_mps)
@@ -224,7 +250,93 @@ class ArmDepthMotionDetector:
             output[f"{side}_arm_rel_depth_m"] = filtered_distance
             output[f"{side}_arm_depth_velocity_mps"] = velocity
             output[f"{side}_arm_depth_direction"] = direction
+
+        for side in ("left", "right"):
+            leg_distance_m = self._leg_distance_for_side(frame, side)
+            if leg_distance_m is None:
+                continue
+            state = self.leg_states[side]
+            direction_sign = self._update_state(state, leg_distance_m, frame.timestamp)
+            filtered_distance = float(state.filtered_rel_depth_m or leg_distance_m)
+            velocity = float(state.last_velocity_mps)
+            direction = float(direction_sign)
+            output[f"{side}_leg_distance_m"] = filtered_distance
+            output[f"{side}_leg_distance_velocity_mps"] = velocity
+            output[f"{side}_leg_distance_direction"] = direction
+            output[f"{side}_leg_back_forth_count"] = float(state.back_forth_count)
+            # Backward-compatible style aliases.
+            output[f"{side}_leg_rel_depth_m"] = filtered_distance
+            output[f"{side}_leg_depth_velocity_mps"] = velocity
+            output[f"{side}_leg_depth_direction"] = direction
         return output
+
+
+@dataclass
+class BodyPartDistanceState:
+    filtered_distance_m: Optional[float] = None
+    previous_timestamp: Optional[float] = None
+    last_velocity_mps: float = 0.0
+
+
+class BodyPartDistanceTracker:
+    def __init__(self) -> None:
+        self.filter_alpha = config.ARM_DEPTH_FILTER_ALPHA
+        self.max_per_frame_jump_m = 0.35
+        self.states: Dict[str, BodyPartDistanceState] = {}
+
+    def _update_state(self, joint_name: str, distance_m: float, timestamp: float) -> BodyPartDistanceState:
+        state = self.states.get(joint_name)
+        if state is None:
+            state = BodyPartDistanceState(
+                filtered_distance_m=distance_m,
+                previous_timestamp=timestamp,
+                last_velocity_mps=0.0,
+            )
+            self.states[joint_name] = state
+            return state
+
+        previous_filtered = state.filtered_distance_m
+        previous_timestamp = state.previous_timestamp
+        if previous_filtered is None or previous_timestamp is None:
+            state.filtered_distance_m = distance_m
+            state.previous_timestamp = timestamp
+            state.last_velocity_mps = 0.0
+            return state
+
+        dt = timestamp - previous_timestamp
+        if dt <= 1e-6:
+            dt = 1e-6
+
+        clamped_distance = min(
+            max(distance_m, previous_filtered - self.max_per_frame_jump_m),
+            previous_filtered + self.max_per_frame_jump_m,
+        )
+        filtered = (previous_filtered * (1.0 - self.filter_alpha)) + (clamped_distance * self.filter_alpha)
+        state.last_velocity_mps = (filtered - previous_filtered) / dt
+        state.filtered_distance_m = filtered
+        state.previous_timestamp = timestamp
+        return state
+
+    def update(self, frame: SkeletonFrame) -> Dict[str, float]:
+        if frame.timestamp <= 0.0:
+            return {}
+        if not frame.source.startswith("ios"):
+            return {}
+        if not frame.joints_3d:
+            return {}
+
+        metrics: Dict[str, float] = {}
+        for joint_name in sorted(frame.joints_3d.keys()):
+            distance_m = _joint_distance_from_frame(frame, joint_name)
+            if distance_m is None:
+                continue
+            state = self._update_state(joint_name, distance_m, frame.timestamp)
+            filtered = state.filtered_distance_m
+            if filtered is None:
+                continue
+            metrics[f"{joint_name}_distance_m"] = float(filtered)
+            metrics[f"{joint_name}_distance_velocity_mps"] = float(state.last_velocity_mps)
+        return metrics
 
 
 class ExercisePipeline:
@@ -237,6 +349,7 @@ class ExercisePipeline:
         self.templates_cache: Dict[str, Dict[str, object]] = {}
         self.previous_ios_joints_3d: Optional[Dict[str, Tuple[float, float, float]]] = None
         self.arm_depth_motion_detector = ArmDepthMotionDetector()
+        self.body_part_distance_tracker = BodyPartDistanceTracker()
 
         self.mongo_client = None
         self.db = None
@@ -328,6 +441,7 @@ class ExercisePipeline:
         if frame.arm_head_state in {"near", "mid", "far"}:
             state_index = {"near": 0.0, "mid": 1.0, "far": 2.0}[frame.arm_head_state]
             metrics["arm_head_state_idx"] = state_index
+        metrics.update(self.body_part_distance_tracker.update(frame))
         metrics.update(self.arm_depth_motion_detector.update(frame))
         feedback = self._compare_with_template(frame.exercise, metrics)
         self._log_session(frame, metrics, feedback)
@@ -397,6 +511,16 @@ class ExercisePipeline:
             la, ra = joints["left_ankle"], joints["right_ankle"]
             metrics["stance_width_m"] = _distance_3d(la, ra)
 
+        if all(key in joints for key in ("left_knee", "left_ankle", "left_foot_index")):
+            metrics["left_ankle_angle_deg"] = _angle_3d(
+                joints["left_knee"], joints["left_ankle"], joints["left_foot_index"]
+            )
+
+        if all(key in joints for key in ("right_knee", "right_ankle", "right_foot_index")):
+            metrics["right_ankle_angle_deg"] = _angle_3d(
+                joints["right_knee"], joints["right_ankle"], joints["right_foot_index"]
+            )
+
         distance_pairs = (
             ("left_upper_arm_length_m", "left_shoulder", "left_elbow"),
             ("right_upper_arm_length_m", "right_shoulder", "right_elbow"),
@@ -408,6 +532,9 @@ class ExercisePipeline:
             ("right_shin_length_m", "right_knee", "right_ankle"),
             ("left_side_body_length_m", "left_shoulder", "left_hip"),
             ("right_side_body_length_m", "right_shoulder", "right_hip"),
+            ("left_foot_length_m", "left_heel", "left_foot_index"),
+            ("right_foot_length_m", "right_heel", "right_foot_index"),
+            ("head_to_neck_m", "nose", "neck"),
         )
         for metric_name, start_joint, end_joint in distance_pairs:
             if start_joint in joints and end_joint in joints:
@@ -426,8 +553,12 @@ class ExercisePipeline:
                 "arm_head_quality",
                 "left_arm_distance_m",
                 "right_arm_distance_m",
+                "left_leg_distance_m",
+                "right_leg_distance_m",
                 "left_arm_distance_velocity_mps",
                 "right_arm_distance_velocity_mps",
+                "left_leg_distance_velocity_mps",
+                "right_leg_distance_velocity_mps",
                 "left_knee_angle_deg",
                 "right_knee_angle_deg",
                 "left_hip_angle_deg",
@@ -676,12 +807,21 @@ async def run_ios_stream_pipeline(pipeline: ExercisePipeline) -> None:
         reconnect_delay_sec=config.IOS_STREAM_RECONNECT_DELAY_SEC,
     )
     remote_uri = build_websocket_uri(ws_config)
+    if config.IOS_DEVICE_IS_SERVER and config.IOS_STREAM_HOST.strip().lower() in {"127.0.0.1", "localhost"}:
+        print(
+            "[iOS stream] IOS_STREAM_HOST is loopback. This only works with iOS Simulator "
+            "or explicit port forwarding. For a physical iPhone, set IOS_STREAM_HOST "
+            "to the phone's LAN IP address."
+        )
 
     last_log_at = 0.0
     warned_missing_ios_video = False
     warned_missing_depth_samples = False
     consecutive_missing_video_frames = 0
     last_missing_video_warning_at = 0.0
+    consecutive_no_depth_frames = 0
+    no_depth_warmup_frames = 12
+    warned_running_without_depth = False
     active_processing_task: Optional[asyncio.Task] = None
     dropped_payloads = 0
     last_drop_log_at = 0.0
@@ -747,6 +887,7 @@ async def run_ios_stream_pipeline(pipeline: ExercisePipeline) -> None:
     async def process_payload(payload: Dict[str, object]) -> None:
         nonlocal last_log_at, preview, warned_missing_ios_video, warned_missing_depth_samples
         nonlocal consecutive_missing_video_frames, last_missing_video_warning_at
+        nonlocal consecutive_no_depth_frames, warned_running_without_depth
         nonlocal last_processed_at, rate_limited_count, last_rate_limit_log_at
         now_perf = time.perf_counter()
         if frame_interval_sec > 0.0 and (now_perf - last_processed_at) < frame_interval_sec:
@@ -769,15 +910,44 @@ async def run_ios_stream_pipeline(pipeline: ExercisePipeline) -> None:
             print(f"[iOS stream] Ignoring invalid payload: {error}")
             return
 
+        depth_mode = (frame.depth_mode or "none").lower()
+        depth_expected = depth_mode not in {"none", "body_only"}
         if not frame.point_depths_m:
+            consecutive_no_depth_frames += 1
             if not warned_missing_depth_samples:
                 warned_missing_depth_samples = True
                 print(
                     "[iOS stream] Payload has no LiDAR point depths. "
-                    f"depth_mode={frame.depth_mode or 'none'}"
+                    f"depth_mode={depth_mode}"
+                )
+            if depth_expected and consecutive_no_depth_frames <= no_depth_warmup_frames:
+                feedback = "Waiting for LiDAR depth points..."
+                if preview is not None and not preview.render(
+                    frame,
+                    feedback,
+                    {},
+                    background_frame=frame.video_frame_bgr,
+                    mediapipe_joints=None,
+                ):
+                    preview = None
+                now = time.time()
+                if now - last_log_at >= 0.5:
+                    last_log_at = now
+                    print(
+                        f"[iOS stream] {frame.exercise} | depth_pts=0 | status=waiting_for_lidar_depth"
+                    )
+                return
+
+            if depth_expected and not warned_running_without_depth:
+                warned_running_without_depth = True
+                print(
+                    "[iOS stream] Continuing without LiDAR point depths after warmup. "
+                    "Using pose/camera fallback distances."
                 )
         else:
+            consecutive_no_depth_frames = 0
             warned_missing_depth_samples = False
+            warned_running_without_depth = False
 
         # Keep runtime lightweight by default: only retain the MediaPipe-mapped LiDAR joints.
         if frame.source.startswith("ios") and not config.IOS_INCLUDE_ALL_JOINTS:
@@ -789,7 +959,10 @@ async def run_ios_stream_pipeline(pipeline: ExercisePipeline) -> None:
                 consecutive_missing_video_frames += 1
                 if config.WARN_IF_IOS_VIDEO_MISSING:
                     now_warn = time.monotonic()
-                    if (now_warn - last_missing_video_warning_at) >= 2.0:
+                    if (
+                        consecutive_missing_video_frames >= 3
+                        and (now_warn - last_missing_video_warning_at) >= 2.0
+                    ):
                         last_missing_video_warning_at = now_warn
                         warned_missing_ios_video = True
                         print(
@@ -825,12 +998,18 @@ async def run_ios_stream_pipeline(pipeline: ExercisePipeline) -> None:
             arm_parts = []
             left_arm_distance = metrics.get("left_arm_distance_m")
             right_arm_distance = metrics.get("right_arm_distance_m")
+            left_leg_distance = metrics.get("left_leg_distance_m")
+            right_leg_distance = metrics.get("right_leg_distance_m")
             arm_head_distance = metrics.get("arm_head_distance_m")
             arm_head_quality = metrics.get("arm_head_quality")
             if left_arm_distance is not None:
                 arm_parts.append(f"L_arm_dist={float(left_arm_distance):.3f}m")
             if right_arm_distance is not None:
                 arm_parts.append(f"R_arm_dist={float(right_arm_distance):.3f}m")
+            if left_leg_distance is not None:
+                arm_parts.append(f"L_leg_dist={float(left_leg_distance):.3f}m")
+            if right_leg_distance is not None:
+                arm_parts.append(f"R_leg_dist={float(right_leg_distance):.3f}m")
             if arm_head_distance is not None:
                 arm_parts.append(f"arm_head={float(arm_head_distance):.3f}m")
             if frame.arm_head_state is not None:
@@ -839,6 +1018,22 @@ async def run_ios_stream_pipeline(pipeline: ExercisePipeline) -> None:
                 arm_parts.append(f"arm_head_q={float(arm_head_quality):.2f}")
             if frame.arm_head_source is not None:
                 arm_parts.append(f"arm_head_src={frame.arm_head_source}")
+            joint_distance_parts = []
+            for metric_name in sorted(metrics.keys()):
+                if not metric_name.endswith("_distance_m"):
+                    continue
+                if metric_name in {"left_arm_distance_m", "right_arm_distance_m", "arm_head_distance_m"}:
+                    continue
+                value = metrics.get(metric_name)
+                if value is None:
+                    continue
+                joint_distance_parts.append(f"{metric_name}={float(value):.3f}m")
+            if joint_distance_parts:
+                preview_count = 8
+                distance_preview = ", ".join(joint_distance_parts[:preview_count])
+                if len(joint_distance_parts) > preview_count:
+                    distance_preview += f", +{len(joint_distance_parts) - preview_count} more"
+                arm_parts.append(f"joint_distances[{len(joint_distance_parts)}]={distance_preview}")
             if not arm_parts:
                 arm_parts.append("arm_distance=NA")
             print(
