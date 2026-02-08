@@ -125,15 +125,18 @@ class ExerciseConfig:
     start_angle: float
     peak_angle: float
     threshold: float = 15.0
+    rest_threshold: float = 35.0
 
 class RepCounter:
     EXERCISES = {
-        "shoulder_raise": ExerciseConfig("Shoulder Raise", (24, 12, 14), 0, 150),
-        "elbow_flexion": ExerciseConfig("Elbow Flexion", (12, 14, 16), 170, 45),
+        "arm_abduction": ExerciseConfig("Arm Abduction", (24, 12, 14), 0, 140, threshold=20),
+        "arm_vw": ExerciseConfig("Arm VW", (24, 12, 14), 30, 165, threshold=25, rest_threshold=40),
+        "squat": ExerciseConfig("Squat", (12, 24, 26), 175, 145, threshold=15, rest_threshold=18),
+        "leg_abduction": ExerciseConfig("Leg Abduction", (11, 23, 25), 172, 140, threshold=15, rest_threshold=15),
     }
     
-    def __init__(self, exercise_key: str = "shoulder_raise"):
-        self.config = self.EXERCISES.get(exercise_key, self.EXERCISES["shoulder_raise"])
+    def __init__(self, exercise_key: str = "arm_abduction"):
+        self.config = self.EXERCISES.get(exercise_key, self.EXERCISES["arm_abduction"])
         self.filter = ComplementaryFilter(alpha=0.85)
         self.controller = PIController(kp=1.0, ki=0.5, ts=0.1)
         self.rep_count = 0; self.state = "rest"; self.current_angle = 0.0; self.smoothed_angle = 0.0; self.form_quality = "neutral"
@@ -153,7 +156,7 @@ class RepCounter:
         
         up = self.config.peak_angle > self.config.start_angle
         at_peak = self.smoothed_angle > (self.config.peak_angle - self.config.threshold) if up else self.smoothed_angle < (self.config.peak_angle + self.config.threshold)
-        at_rest = self.smoothed_angle < (self.config.start_angle + self.config.threshold) if up else self.smoothed_angle > (self.config.start_angle - self.config.threshold)
+        at_rest = self.smoothed_angle < (self.config.start_angle + self.config.rest_threshold) if up else self.smoothed_angle > (self.config.start_angle - self.config.rest_threshold)
         
         if self.state == "rest" and not at_rest: self.state = "moving"
         elif self.state == "moving" and at_peak: self.state = "peak"
@@ -207,11 +210,11 @@ class PainDetector:
         # Mouth (13, 14, 78, 308) -> (top, bottom, left, right)
         mar = dist(13, 14) / (dist(78, 308) + 1e-6)
         
-        # Logic
-        if ear < self.EAR_STOP or mar > self.MAR_STOP:
+        # Logic — require BOTH eyes and mouth to flag (no single-indicator triggers)
+        if ear < self.EAR_STOP and mar > self.MAR_STOP:
             self.pain_level = "stop"
             self.message = "STOP! HIGH PAIN DETECTED"
-        elif ear < self.EAR_WARNING or mar > self.MAR_WARNING:
+        elif ear < self.EAR_WARNING and mar > self.MAR_WARNING:
             self.pain_level = "warning"
             self.message = "Warning: Facial Strain Detected"
         else:
@@ -258,7 +261,9 @@ face_landmarker = FaceLandmarker.create_from_options(
 )
 
 # ── Webcam ──
-rep_counter = RepCounter("shoulder_raise")
+exercise_keys = list(RepCounter.EXERCISES.keys())
+exercise_idx = 0
+rep_counter = RepCounter(exercise_keys[exercise_idx])
 pain_detector = PainDetector()
 cap = cv2.VideoCapture(0)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
@@ -268,7 +273,7 @@ if not cap.isOpened():
     print("ERROR: Cannot open camera")
     exit(1)
 
-print("Camera opened. Press 'q' to quit.")
+print("Camera opened. Press 'e' to cycle exercises, 'r' to reset reps, 'q' to quit.")
 prev_time = time.time()
 
 while cap.isOpened():
@@ -383,13 +388,21 @@ while cap.isOpened():
     fps = 1.0 / (curr_time - prev_time) if (curr_time - prev_time) > 0 else 0
     prev_time = curr_time
     cv2.putText(frame, f"FPS: {int(fps)}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-    cv2.putText(frame, "Pose(heavy) + Hands + Face Mesh | Press Q to quit", (10, h - 15),
+    cv2.putText(frame, "E: cycle exercise | R: reset reps | Q: quit", (10, h - 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
 
     cv2.imshow("Body Tracker", frame)
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord("q"):
         break
+    elif key == ord("e"):
+        exercise_idx = (exercise_idx + 1) % len(exercise_keys)
+        rep_counter = RepCounter(exercise_keys[exercise_idx])
+        print(f"Switched to: {rep_counter.config.name}")
+    elif key == ord("r"):
+        rep_counter.reset()
+        print("Reps reset.")
 
 pose_landmarker.close()
 hand_landmarker.close()
