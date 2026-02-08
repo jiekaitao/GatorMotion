@@ -634,6 +634,7 @@ export async function getPatientActivitySummary(userId: string) {
   ]);
   return { sessions, assignments, streak };
 }
+
 export async function getExerciseSessionsByUser(userId: string, limit = 30) {
   const db = await getDb();
   return db

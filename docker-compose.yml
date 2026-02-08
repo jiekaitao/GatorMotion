@@ -20,6 +20,12 @@ services:
       - internal
     restart: unless-stopped
 
+  lidar-api:
+    build: ./server
+    networks:
+      - internal
+    restart: unless-stopped
+
   nginx:
     build: ./nginx
     ports:
@@ -33,6 +39,7 @@ services:
     depends_on:
       - nextjs
       - cv-api
+      - lidar-api
     networks:
       - internal
     restart: unless-stopped

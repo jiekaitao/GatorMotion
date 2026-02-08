@@ -1,0 +1,69 @@
+name: PhysioLiDAR
+options:
+  bundleIdPrefix: com.gatormotion
+  deploymentTarget:
+    iOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "14.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  PhysioLiDAR:
+    type: application
+    platform: iOS
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: PhysioLiDAR
+        NSLocalNetworkUsageDescription: "Streams AR skeleton data to your therapy workstation over local network."
+        NSCameraUsageDescription: "Camera is required for AR body tracking during physical therapy exercises."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UILaunchScreen: {}
+        UIRequiresFullScreen: YES
+    sources:
+      - path: .
+        excludes:
+          - "project.yml"
+          - "Podfile"
+          - "Podfile.lock"
+          - "Pods/**"
+          - "PhysioLiDAR.xcworkspace/**"
+          - "PhysioLiDAR.xcodeproj/**"
+          - "build/**"
+          - "webapp/**"
+          - "Models/**"
+          - "ARBodyTrackingView.swift"
+          - "HybridCaptureManager.swift"
+          - "NativeBridge.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gatormotion.PhysioLiDAR
+        PRODUCT_NAME: PhysioLiDAR
+        DEVELOPMENT_TEAM: 3S2X4R5G86
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  PhysioLiDAR:
+    build:
+      targets:
+        PhysioLiDAR: all
+    run:
+      config: Debug
+    archive:
+      config: Release
