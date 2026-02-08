@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import textwrap
 import time
 from collections import deque
@@ -249,6 +250,18 @@ class PTCoachEngine:
         active_ids_now: set[str] = set()
 
         for idx in self.correction_landmarks:
+            lm_vis = float(landmarks_xyzw[idx, 3])
+            side = self.tol[idx]["side"]
+            part = self.tol[idx]["part"]
+            correction_id = f"{side.upper()}_{part.upper()}_{idx}"
+
+            # Do not generate correction vectors when that appendage landmark is not reliably detected.
+            if lm_vis < 0.55:
+                self.active_corrections[correction_id] = False
+                self.activate_streak[correction_id] = 0
+                self.clear_streak[correction_id] = 0
+                continue
+
             cur_x = float(norm[idx, 0])
             cur_y = float(norm[idx, 1])
             ref_x = float(ref[idx, 0])
@@ -260,10 +273,6 @@ class PTCoachEngine:
             ratio_x = abs(dx) / max(tol_x, 1e-6)
             ratio_y = abs(dy) / max(tol_y, 1e-6)
             err_ratio = max(ratio_x, ratio_y)
-
-            side = self.tol[idx]["side"]
-            part = self.tol[idx]["part"]
-            correction_id = f"{side.upper()}_{part.upper()}_{idx}"
 
             was_active = self.active_corrections.get(correction_id, False)
             should_activate = (
@@ -319,6 +328,7 @@ class PTCoachEngine:
                 "severity": self._severity_from_ratio(err_ratio),
                 "side": side,
                 "part": part,
+                "landmark_visibility": round(lm_vis, 3),
                 "target": {
                     "delta_x_body": round(float(-dx), 4),
                     "delta_y_body": round(float(-dy), 4),
@@ -441,16 +451,82 @@ class ReferenceDemoLoop:
         data = load_reference_json(reference_json)
         self.fps = float(data.get("fps", 15.0))
         self.frames = [landmarks_list_to_np(f["landmarks"]) for f in data.get("frames", [])]
-        self.start_ts_ms: int | None = None
+        self.play_idx = float(len(self.frames) * 0.35) if self.frames else 0.0
+        self.last_ts_ms: int | None = None
+        self.last_snap_ts_ms = -10_000
+        self.snap_flash_until_ms = 0
+        self.notice_until_ms = 0
+        self.notice_text = ""
+        self.snap_cooldown_ms = 450
+        self.min_snap_jump_frames = 5
 
-    def frame_at(self, ts_ms: int) -> tuple[np.ndarray | None, int]:
+    def _cyclic_distance(self, a: float, b: int) -> float:
         if not self.frames:
-            return None, -1
-        if self.start_ts_ms is None:
-            self.start_ts_ms = int(ts_ms)
-        elapsed_s = max(0.0, (ts_ms - self.start_ts_ms) / 1000.0)
-        idx = int((elapsed_s * self.fps) % len(self.frames))
-        return self.frames[idx], idx
+            return 0.0
+        n = float(len(self.frames))
+        d = abs(a - float(b))
+        return min(d, n - d)
+
+    def update(
+        self,
+        ts_ms: int,
+        suggested_idx: int | None = None,
+        suggested_distance: float | None = None,
+        snap_threshold: float = 1.5,
+    ) -> dict[str, Any]:
+        if not self.frames:
+            return {
+                "landmarks": None,
+                "frame_idx": -1,
+                "flash_strength": 0.0,
+                "flash_pulse": 0.0,
+                "notice": "",
+                "snapped": False,
+            }
+
+        if self.last_ts_ms is None:
+            self.last_ts_ms = int(ts_ms)
+
+        dt_s = max(0.0, (ts_ms - self.last_ts_ms) / 1000.0)
+        self.last_ts_ms = int(ts_ms)
+        self.play_idx = (self.play_idx + dt_s * self.fps) % len(self.frames)
+
+        snapped = False
+        if suggested_idx is not None and suggested_idx >= 0 and suggested_distance is not None:
+            jump = self._cyclic_distance(self.play_idx, suggested_idx)
+            within_threshold = float(suggested_distance) <= float(snap_threshold)
+            cooldown_done = (ts_ms - self.last_snap_ts_ms) >= self.snap_cooldown_ms
+            if within_threshold and cooldown_done and jump >= self.min_snap_jump_frames:
+                self.play_idx = float(suggested_idx % len(self.frames))
+                self.last_snap_ts_ms = int(ts_ms)
+                self.snap_flash_until_ms = int(ts_ms + 1000)
+                self.notice_until_ms = int(ts_ms + 2200)
+                self.notice_text = (
+                    f"Temporal alignment snap -> frame {int(self.play_idx)} "
+                    f"(dist {float(suggested_distance):.2f} <= {float(snap_threshold):.2f})"
+                )
+                snapped = True
+
+        idx = int(round(self.play_idx)) % len(self.frames)
+
+        flash_strength = 0.0
+        flash_pulse = 0.0
+        if ts_ms <= self.snap_flash_until_ms:
+            remaining = max(0.0, (self.snap_flash_until_ms - ts_ms) / 1000.0)
+            # Fade-out pulsing flash.
+            flash_strength = float(min(1.0, remaining * 2.0))
+            phase = (ts_ms - self.last_snap_ts_ms) / 140.0
+            flash_pulse = 0.5 + 0.5 * math.sin(2.0 * math.pi * phase)
+
+        notice = self.notice_text if ts_ms <= self.notice_until_ms else ""
+        return {
+            "landmarks": self.frames[idx],
+            "frame_idx": idx,
+            "flash_strength": flash_strength,
+            "flash_pulse": flash_pulse,
+            "notice": notice,
+            "snapped": snapped,
+        }
 
 
 def _project_landmarks_to_box(
@@ -481,6 +557,8 @@ def draw_demo_wireframe_loop(
     demo_landmarks: np.ndarray | None,
     loop_idx: int,
     title: str,
+    flash_strength: float = 0.0,
+    flash_pulse: float = 0.0,
     box_w: int = 250,
     box_h: int = 250,
 ) -> None:
@@ -496,15 +574,28 @@ def draw_demo_wireframe_loop(
     overlay = frame.copy()
     cv2.rectangle(overlay, (x0, y0), (x1, y1), (28, 28, 34), -1)
     cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
-    cv2.rectangle(frame, (x0, y0), (x1, y1), (90, 120, 200), 1)
+
+    base = np.array([90.0, 120.0, 200.0], dtype=np.float32)
+    flash = np.array([120.0, 245.0, 170.0], dtype=np.float32)
+    border = (1.0 - flash_strength) * base + flash_strength * flash
+    border_color = tuple(int(v) for v in border.tolist())
+    thickness = 1 if flash_strength < 0.35 else 2
+    cv2.rectangle(frame, (x0, y0), (x1, y1), border_color, thickness)
 
     pts, vis = _project_landmarks_to_box(demo_landmarks, x0, y0, box_w, box_h)
+    base_line = np.array([90.0, 220.0, 255.0], dtype=np.float32)
+    red_line = np.array([30.0, 30.0, 255.0], dtype=np.float32)
+    line_blend = float(np.clip(flash_strength * (0.45 + 0.55 * flash_pulse), 0.0, 1.0))
+    line_color_arr = (1.0 - line_blend) * base_line + line_blend * red_line
+    line_color = tuple(int(v) for v in line_color_arr.tolist())
+    line_thickness = 1 if line_blend < 0.35 else 2
+
     for a, b in POSE_CONNECTIONS:
         if a >= len(pts) or b >= len(pts):
             continue
         if not (vis[a] and vis[b]):
             continue
-        cv2.line(frame, pts[a], pts[b], (90, 220, 255), 1, cv2.LINE_AA)
+        cv2.line(frame, pts[a], pts[b], line_color, line_thickness, cv2.LINE_AA)
 
     for i, p in enumerate(pts):
         if i < len(vis) and not vis[i]:
@@ -533,10 +624,15 @@ def draw_demo_wireframe_loop(
     )
 
 
-def draw_pose_points(frame: np.ndarray, landmarks_xyzw: np.ndarray, color=(40, 255, 120)) -> None:
+def draw_pose_points(
+    frame: np.ndarray, landmarks_xyzw: np.ndarray, color=(40, 255, 120), mirror: bool = False
+) -> None:
     h, w = frame.shape[:2]
     for i in range(33):
-        x = int(np.clip(landmarks_xyzw[i, 0], 0.0, 1.0) * (w - 1))
+        x_norm = float(landmarks_xyzw[i, 0])
+        if mirror:
+            x_norm = 1.0 - x_norm
+        x = int(np.clip(x_norm, 0.0, 1.0) * (w - 1))
         y = int(np.clip(landmarks_xyzw[i, 1], 0.0, 1.0) * (h - 1))
         vis = float(landmarks_xyzw[i, 3])
         if vis < 0.25:
@@ -544,7 +640,7 @@ def draw_pose_points(frame: np.ndarray, landmarks_xyzw: np.ndarray, color=(40, 2
         cv2.circle(frame, (x, y), 3, color, -1)
 
 
-def draw_correction_overlays(frame: np.ndarray, payload: dict[str, Any]) -> None:
+def draw_correction_overlays(frame: np.ndarray, payload: dict[str, Any], mirror: bool = False) -> None:
     h, w = frame.shape[:2]
     severity_color = {
         "low": (80, 190, 255),
@@ -559,12 +655,18 @@ def draw_correction_overlays(frame: np.ndarray, payload: dict[str, Any]) -> None
         if not cur or not tgt:
             continue
 
+        x_cur = float(cur[0])
+        x_tgt = float(tgt[0])
+        if mirror:
+            x_cur = 1.0 - x_cur
+            x_tgt = 1.0 - x_tgt
+
         p_cur = (
-            int(np.clip(float(cur[0]), 0.0, 1.0) * (w - 1)),
+            int(np.clip(x_cur, 0.0, 1.0) * (w - 1)),
             int(np.clip(float(cur[1]), 0.0, 1.0) * (h - 1)),
         )
         p_tgt = (
-            int(np.clip(float(tgt[0]), 0.0, 1.0) * (w - 1)),
+            int(np.clip(x_tgt, 0.0, 1.0) * (w - 1)),
             int(np.clip(float(tgt[1]), 0.0, 1.0) * (h - 1)),
         )
 
@@ -590,7 +692,9 @@ def draw_correction_overlays(frame: np.ndarray, payload: dict[str, Any]) -> None
             )
 
 
-def render_panel(frame: np.ndarray, payload: dict[str, Any], width: int = 410) -> np.ndarray:
+def render_panel(
+    frame: np.ndarray, payload: dict[str, Any], width: int = 410, alignment_notice: str = ""
+) -> np.ndarray:
     h, w = frame.shape[:2]
     panel = np.zeros((h, width, 3), dtype=np.uint8)
     panel[:] = (18, 18, 22)
@@ -617,6 +721,12 @@ def render_panel(frame: np.ndarray, payload: dict[str, Any], width: int = 410) -
             color=(145, 160, 180),
             scale=0.5,
         )
+        if "temporal_distance" in align:
+            write_line(
+                f"tDist: {float(align.get('temporal_distance', 0.0)):.3f}  snap<= {float(align.get('snap_threshold', 0.0)):.3f}",
+                color=(140, 182, 148),
+                scale=0.5,
+            )
 
     y += 8
     cv2.line(panel, (12, y), (width - 12, y), (70, 70, 75), 1)
@@ -669,6 +779,41 @@ def render_panel(frame: np.ndarray, payload: dict[str, Any], width: int = 410) -
         )
     else:
         write_line("Measurements: waiting for pose...", color=(210, 220, 255), scale=0.58)
+
+    if alignment_notice:
+        wrapped = textwrap.wrap(alignment_notice, width=43)[:3]
+        box_h = 24 + 18 * len(wrapped)
+        box_w = width - 24
+        bx0 = 12
+        by0 = h - box_h - 12
+        bx1 = bx0 + box_w
+        by1 = by0 + box_h
+        cv2.rectangle(panel, (bx0, by0), (bx1, by1), (42, 72, 48), -1)
+        cv2.rectangle(panel, (bx0, by0), (bx1, by1), (140, 255, 165), 1)
+        yy = by0 + 18
+        cv2.putText(
+            panel,
+            "Temporal Alignment",
+            (bx0 + 8, yy),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (205, 255, 220),
+            1,
+            cv2.LINE_AA,
+        )
+        yy += 17
+        for line in wrapped:
+            cv2.putText(
+                panel,
+                line,
+                (bx0 + 8, yy),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.42,
+                (220, 240, 226),
+                1,
+                cv2.LINE_AA,
+            )
+            yy += 16
 
     # Compose side-by-side output.
     return np.concatenate([frame, panel], axis=1)
@@ -748,6 +893,12 @@ def main() -> None:
     parser.add_argument("--source-json", default="", help="Replay landmark JSON instead of webcam")
     parser.add_argument("--no-window", action="store_true", help="Disable OpenCV UI window")
     parser.add_argument("--no-demo-loop", action="store_true", help="Disable looped reference wireframe overlay")
+    parser.add_argument(
+        "--align-snap-threshold",
+        type=float,
+        default=-1.0,
+        help="Temporal alignment distance threshold for snapping demo loop (-1 = auto)",
+    )
     parser.add_argument("--max-frames", type=int, default=0, help="Stop after N frames (0=run forever)")
     parser.add_argument("--print-every", type=int, default=10, help="Console print cadence in frames")
     args = parser.parse_args()
@@ -786,6 +937,12 @@ def main() -> None:
         else:
             print(f"Demo loop source not found, skipping overlay: {demo_source}")
 
+    if args.align_snap_threshold > 0:
+        snap_threshold = float(args.align_snap_threshold)
+    else:
+        snap_threshold = float(engine.dist_cal.get("p90", 1.5)) * 1.1
+    print(f"Temporal snap threshold: {snap_threshold:.3f}")
+
     if args.source_json:
         replayer = Replayer(Path(args.source_json))
         print(f"Replay mode from: {args.source_json}")
@@ -804,13 +961,15 @@ def main() -> None:
             ts_ms = int(time.time() * 1000)
             frame = None
             landmarks_xyzw = None
+            demo_state: dict[str, Any] | None = None
+            alignment_notice = ""
 
             if replayer is not None:
                 landmarks_xyzw = replayer.next_landmarks()
                 if landmarks_xyzw is None:
                     break
                 frame = np.zeros((720, 960, 3), dtype=np.uint8)
-                draw_pose_points(frame, landmarks_xyzw)
+                draw_pose_points(frame, landmarks_xyzw, mirror=args.mirror)
             else:
                 assert cap is not None and landmarker is not None
                 ret, raw = cap.read()
@@ -822,10 +981,10 @@ def main() -> None:
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 result = landmarker.detect_for_video(mp_image, ts_ms)
 
-                frame = raw
+                frame = cv2.flip(raw, 1) if args.mirror else raw
                 if result.pose_landmarks and len(result.pose_landmarks) > 0:
                     landmarks_xyzw = mediapipe_landmarks_to_np(result.pose_landmarks[0])
-                    draw_pose_points(frame, landmarks_xyzw)
+                    draw_pose_points(frame, landmarks_xyzw, mirror=args.mirror)
 
             if landmarks_xyzw is None:
                 payload = {
@@ -835,6 +994,7 @@ def main() -> None:
                         "display_name": spec.display_name,
                         "phase": "setup",
                         "rep": 0,
+                        "reference_frame": -1,
                     },
                     "alignment": {
                         "method": "temporal_window_mse",
@@ -861,6 +1021,27 @@ def main() -> None:
             else:
                 payload = engine.infer(landmarks_xyzw, ts_ms)
 
+            if demo_loop is not None:
+                align_info = payload.get("alignment", {})
+                suggested_idx = int(payload.get("exercise", {}).get("reference_frame", -1))
+                suggested_dist_val = align_info.get("temporal_distance")
+                suggested_dist = float(suggested_dist_val) if suggested_dist_val is not None else None
+                demo_state = demo_loop.update(
+                    ts_ms,
+                    suggested_idx=suggested_idx,
+                    suggested_distance=suggested_dist,
+                    snap_threshold=snap_threshold,
+                )
+                payload.setdefault("alignment", {})
+                payload["alignment"]["snap_threshold"] = round(float(snap_threshold), 4)
+                payload["alignment"]["demo_loop_frame"] = int(demo_state["frame_idx"])
+                payload["alignment"]["demo_snapped"] = bool(demo_state["snapped"])
+                if demo_state.get("notice"):
+                    payload["alignment"]["notice"] = str(demo_state["notice"])
+                alignment_notice = str(demo_state.get("notice", ""))
+                if demo_state.get("snapped"):
+                    print(f"[align] {alignment_notice}")
+
             json_out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
             if args.print_every > 0 and frame_count % args.print_every == 0:
@@ -871,13 +1052,17 @@ def main() -> None:
                 )
 
             if not args.no_window:
-                if demo_loop is not None:
-                    demo_lms, demo_idx = demo_loop.frame_at(ts_ms)
-                    draw_demo_wireframe_loop(frame, demo_lms, demo_idx, payload["exercise"].get("display_name", spec.display_name))
-                draw_correction_overlays(frame, payload)
-                if args.mirror:
-                    frame = cv2.flip(frame, 1)
-                composed = render_panel(frame, payload)
+                if demo_state is not None:
+                    draw_demo_wireframe_loop(
+                        frame,
+                        demo_state.get("landmarks"),
+                        int(demo_state.get("frame_idx", -1)),
+                        payload["exercise"].get("display_name", spec.display_name),
+                        flash_strength=float(demo_state.get("flash_strength", 0.0)),
+                        flash_pulse=float(demo_state.get("flash_pulse", 0.0)),
+                    )
+                draw_correction_overlays(frame, payload, mirror=args.mirror)
+                composed = render_panel(frame, payload, alignment_notice=alignment_notice)
                 cv2.imshow("PT Coach Live Demo", composed)
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):

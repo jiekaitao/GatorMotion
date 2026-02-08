@@ -19,6 +19,7 @@ Live coaching view now includes:
 - on-frame arrows from current joint position to target position; arrows shrink as you move closer and disappear when within tolerance
 - temporal phase matching using the user's recent 1-second motion window against all reference windows
 - a looped demo wireframe overlay to follow
+- demo-loop temporal snaps to best-fit frame (within threshold), with temporary light-green pulse and developer notice
 
 ## Folder layout
 
@@ -74,6 +75,12 @@ python3 train_model.py --exercise squat
 
 ```bash
 python3 live_coach.py --exercise squat --camera 0 --mirror
+```
+
+Optional temporal snap threshold override:
+
+```bash
+python3 live_coach.py --exercise squat --camera 0 --mirror --align-snap-threshold 1.5
 ```
 
 ## Fast one-command run

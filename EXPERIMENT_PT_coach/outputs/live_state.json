@@ -1,230 +1,43 @@
 {
-  "ts_ms": 1770526138271,
+  "ts_ms": 1770527265129,
   "exercise": {
     "name": "squat",
     "display_name": "Squat",
-    "phase": "ascending",
-    "rep": 0,
-    "reference_frame": 152
+    "phase": "setup",
+    "rep": 24,
+    "reference_frame": 15
   },
   "alignment": {
     "method": "temporal_window_mse",
     "window_ms": 1000,
     "window_samples": 15,
-    "temporal_distance": 37.0988
+    "temporal_distance": 58.2895,
+    "snap_threshold": 1.5866,
+    "demo_loop_frame": 128,
+    "demo_snapped": false
   },
   "quality": {
     "score": 0.0,
-    "confidence": 0.26,
-    "distance": 35.6798
+    "confidence": 0.266,
+    "distance": 56.003
   },
   "measurements": {
-    "left_knee_angle_deg": 179.4,
-    "right_knee_angle_deg": 179.6,
-    "avg_knee_angle_deg": 179.5,
-    "left_foot_x_body": 1.272,
-    "right_foot_x_body": 0.649
+    "left_knee_angle_deg": 176.6,
+    "right_knee_angle_deg": 178.6,
+    "avg_knee_angle_deg": 177.6,
+    "left_foot_x_body": 1.938,
+    "right_foot_x_body": 1.393
   },
   "corrections": [
     {
-      "id": "RIGHT_ANKLE_28",
-      "severity": "high",
-      "side": "right",
-      "part": "ankle",
-      "target": {
-        "delta_x_body": -1.8686,
-        "delta_y_body": 0.3081,
-        "units": "body_norm"
-      },
-      "why": {
-        "metric": "body_frame_position_error",
-        "current_x": 0.7286,
-        "target_x": -1.14,
-        "delta_x": 1.8686,
-        "tol_x": 0.3607,
-        "current_y": -6.8505,
-        "target_y": -6.5424,
-        "delta_y": -0.3081,
-        "tol_y": 0.3785,
-        "ratio_x": 5.18,
-        "ratio_y": 0.814,
-        "ratio": 5.18
-      },
-      "why_text": "x +0.73->-1.14 (tol 0.36), y -6.85->-6.54 (tol 0.38), ratio 5.18x",
-      "ui": {
-        "landmark_index": 28,
-        "current_xy_norm": [
-          0.4138,
-          2.8854
-        ],
-        "target_xy_norm": [
-          0.072,
-          2.6689
-        ]
-      },
-      "text": "Move your right ankle right more.",
-      "error_ratio": 5.18
-    },
-    {
-      "id": "RIGHT_FOOT_32",
-      "severity": "high",
-      "side": "right",
-      "part": "foot",
-      "target": {
-        "delta_x_body": -2.0685,
-        "delta_y_body": 0.0729,
-        "units": "body_norm"
-      },
-      "why": {
-        "metric": "body_frame_position_error",
-        "current_x": 0.6485,
-        "target_x": -1.42,
-        "delta_x": 2.0685,
-        "tol_x": 0.4182,
-        "current_y": -7.5046,
-        "target_y": -7.4316,
-        "delta_y": -0.0729,
-        "tol_y": 0.4059,
-        "ratio_x": 4.946,
-        "ratio_y": 0.18,
-        "ratio": 4.946
-      },
-      "why_text": "x +0.65->-1.42 (tol 0.42), y -7.50->-7.43 (tol 0.41), ratio 4.95x",
-      "ui": {
-        "landmark_index": 32,
-        "current_xy_norm": [
-          0.3707,
-          3.0045
-        ],
-        "target_xy_norm": [
-          -0.0146,
-          2.8132
-        ]
-      },
-      "text": "Move your right foot right more.",
-      "error_ratio": 4.946
-    },
-    {
-      "id": "RIGHT_KNEE_26",
-      "severity": "high",
-      "side": "right",
-      "part": "knee",
-      "target": {
-        "delta_x_body": -0.922,
-        "delta_y_body": 0.2259,
-        "units": "body_norm"
-      },
-      "why": {
-        "metric": "body_frame_position_error",
-        "current_x": 0.1631,
-        "target_x": -0.7588,
-        "delta_x": 0.922,
-        "tol_x": 0.1905,
-        "current_y": -3.6344,
-        "target_y": -3.4085,
-        "delta_y": -0.2259,
-        "tol_y": 0.3247,
-        "ratio_x": 4.841,
-        "ratio_y": 0.696,
-        "ratio": 4.841
-      },
-      "why_text": "x +0.16->-0.76 (tol 0.19), y -3.63->-3.41 (tol 0.32), ratio 4.84x",
-      "ui": {
-        "landmark_index": 26,
-        "current_xy_norm": [
-          0.4341,
-          2.264
-        ],
-        "target_xy_norm": [
-          0.2604,
-          2.123
-        ]
-      },
-      "text": "Move your right knee right more.",
-      "error_ratio": 4.841
-    },
-    {
-      "id": "LEFT_KNEE_25",
-      "severity": "high",
-      "side": "left",
-      "part": "knee",
-      "target": {
-        "delta_x_body": -0.5748,
-        "delta_y_body": 0.2802,
-        "units": "body_norm"
-      },
-      "why": {
-        "metric": "body_frame_position_error",
-        "current_x": 1.1654,
-        "target_x": 0.5906,
-        "delta_x": 0.5748,
-        "tol_x": 0.2187,
-        "current_y": -3.6993,
-        "target_y": -3.4191,
-        "delta_y": -0.2802,
-        "tol_y": 0.3717,
-        "ratio_x": 2.628,
-        "ratio_y": 0.754,
-        "ratio": 2.628
-      },
-      "why_text": "x +1.17->+0.59 (tol 0.22), y -3.70->-3.42 (tol 0.37), ratio 2.63x",
-      "ui": {
-        "landmark_index": 25,
-        "current_xy_norm": [
-          0.6201,
-          2.322
-        ],
-        "target_xy_norm": [
-          0.545,
-          2.1787
-        ]
-      },
-      "text": "Move your left knee right more.",
-      "error_ratio": 2.628
-    },
-    {
-      "id": "LEFT_ANKLE_27",
-      "severity": "high",
-      "side": "left",
-      "part": "ankle",
-      "target": {
-        "delta_x_body": -0.8436,
-        "delta_y_body": 0.5129,
-        "units": "body_norm"
-      },
-      "why": {
-        "metric": "body_frame_position_error",
-        "current_x": 1.7119,
-        "target_x": 0.8683,
-        "delta_x": 0.8436,
-        "tol_x": 0.3711,
-        "current_y": -6.9308,
-        "target_y": -6.4178,
-        "delta_y": -0.5129,
-        "tol_y": 0.3748,
-        "ratio_x": 2.273,
-        "ratio_y": 1.369,
-        "ratio": 2.273
-      },
-      "why_text": "x +1.71->+0.87 (tol 0.37), y -6.93->-6.42 (tol 0.37), ratio 2.27x",
-      "ui": {
-        "landmark_index": 27,
-        "current_xy_norm": [
-          0.5956,
-          2.9292
-        ],
-        "target_xy_norm": [
-          0.4412,
-          2.7298
-        ]
-      },
-      "text": "Move your left ankle right and up more.",
-      "error_ratio": 2.273
+      "id": "POSE_NOT_CLEAR",
+      "severity": "low",
+      "text": "Move fully into frame and face the camera."
     }
   ],
   "speech": {
-    "should_speak": true,
-    "text": "Move your right ankle right more.",
+    "should_speak": false,
+    "text": "",
     "cooldown_ms": 5000
   }
 }
