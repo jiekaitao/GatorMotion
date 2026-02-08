@@ -46,13 +46,15 @@ export async function POST(req: NextRequest) {
   const id = await createAssignment({
     userId: targetUserId,
     date: targetDate,
-    exercises: exercises.map((ex: { exerciseId: string; exerciseName: string; sets?: number; reps?: number; holdSec?: number }) => ({
+    exercises: exercises.map((ex: { exerciseId: string; exerciseName: string; sets?: number; reps?: number; holdSec?: number; exerciseKey?: string; skeletonDataFile?: string }) => ({
       exerciseId: ex.exerciseId,
       exerciseName: ex.exerciseName || "Exercise",
       sets: ex.sets || 3,
       reps: ex.reps || 10,
       holdSec: ex.holdSec || 0,
       completed: false,
+      ...(ex.exerciseKey ? { exerciseKey: ex.exerciseKey } : {}),
+      ...(ex.skeletonDataFile ? { skeletonDataFile: ex.skeletonDataFile } : {}),
     })),
   });
 

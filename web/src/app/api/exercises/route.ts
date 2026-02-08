@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, description, category, defaultSets, defaultReps, defaultHoldSec, imageUrl } = body;
+  const { name, description, category, defaultSets, defaultReps, defaultHoldSec, imageUrl, exerciseKey, skeletonDataFile } = body;
 
   if (!name) {
     return NextResponse.json({ error: "Exercise name is required" }, { status: 400 });
@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
     defaultReps: defaultReps || 10,
     defaultHoldSec: defaultHoldSec || 0,
     imageUrl: imageUrl || undefined,
+    exerciseKey: exerciseKey || undefined,
+    skeletonDataFile: skeletonDataFile || undefined,
   });
 
   return NextResponse.json({ success: true, id: id.toString() });

@@ -15,6 +15,9 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
+from rep_counter import RepCounter, PainDetector
+
 from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python.vision import (
     FaceLandmarker,
@@ -197,6 +200,87 @@ async def ws_track(websocket: WebSocket):
                 rgb = decode_frame(msg.get("text", ""))
 
             response = await _process_frame(rgb, detectors)
+            await websocket.send_json(response)
+    except WebSocketDisconnect:
+        pass
+
+
+@app.websocket("/ws/exercise")
+async def ws_exercise(websocket: WebSocket):
+    """
+    Exercise-aware WebSocket endpoint with rep counting and pain detection.
+    Query params: ?exercise=arm_abduction&detect=pose,face
+    """
+    exercise_key = websocket.query_params.get("exercise", "arm_abduction")
+    detect_param = websocket.query_params.get("detect", "pose,face")
+    detectors = {d.strip() for d in detect_param.split(",")}
+    # Always need pose for rep counting
+    detectors.add("pose")
+
+    rep_counter = RepCounter(exercise_key)
+    pain_detector = PainDetector()
+
+    await websocket.accept()
+    try:
+        while True:
+            msg = await websocket.receive()
+
+            if "bytes" in msg and msg["bytes"]:
+                rgb = decode_frame_bytes(msg["bytes"])
+            else:
+                rgb = decode_frame(msg.get("text", ""))
+
+            h, w = rgb.shape[:2]
+
+            # Run landmark detection
+            tracking = await _process_frame(rgb, detectors)
+
+            # Rep counting from pose landmarks
+            exercise_status = {
+                "rep_count": rep_counter.rep_count,
+                "angle": 0,
+                "state": "waiting",
+                "form_quality": "neutral",
+                "name": rep_counter.config.name,
+            }
+            if tracking["pose"] and len(tracking["pose"]) > 0:
+                # Convert dicts back to objects for RepCounter
+                pose_lms = tracking["pose"][0]
+
+                class LM:
+                    def __init__(self, d):
+                        self.x = d["x"]
+                        self.y = d["y"]
+                        self.z = d.get("z", 0)
+                        self.visibility = d.get("visibility", 1.0)
+
+                lm_objects = [LM(d) for d in pose_lms]
+                exercise_status = rep_counter.update(lm_objects, w, h)
+
+            # Pain detection from face landmarks
+            pain_status = {"level": "normal", "message": ""}
+            if (
+                "face" in detectors
+                and tracking["face"]
+                and len(tracking["face"]) > 0
+            ):
+                face_lms = tracking["face"][0]
+
+                class FLM:
+                    def __init__(self, d):
+                        self.x = d["x"]
+                        self.y = d["y"]
+                        self.z = d.get("z", 0)
+
+                flm_objects = [FLM(d) for d in face_lms]
+                result = pain_detector.update(flm_objects, w, h)
+                pain_status = {"level": result[0], "message": result[1]}
+
+            response = {
+                **tracking,
+                "exercise": exercise_status,
+                "pain": pain_status,
+            }
             await websocket.send_json(response)
     except WebSocketDisconnect:
         pass

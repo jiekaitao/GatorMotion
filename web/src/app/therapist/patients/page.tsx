@@ -5,12 +5,19 @@ import { useRouter } from "next/navigation";
 
 import { UserPlus, X, Clock, Trash2 } from "lucide-react";
 
+interface AssignmentExercise {
+  exerciseId: string;
+  exerciseName: string;
+  completed: boolean;
+}
+
 interface Patient {
   _id: string;
   name: string;
   username: string;
   createdAt: string;
   streak: { currentStreak: number; longestStreak: number; lastCompletedDate: string | null } | null;
+  todayAssignment?: { exercises: AssignmentExercise[] } | null;
 }
 
 interface Invite {
@@ -232,24 +239,47 @@ export default function TherapistPatientsPage() {
           </h3>
           {patients.length > 0 ? (
             <div className="stack stack-sm">
-              {patients.map((p) => (
-                <div key={p._id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              {patients.map((p) => {
+                const exercises = p.todayAssignment?.exercises || [];
+                return (
+                <div
+                  key={p._id}
+                  className="card-interactive"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+                  onClick={() => router.push(`/therapist/patients/${p._id}`)}
+                >
                   <div>
                     <div style={{ fontWeight: 700 }}>{p.name}</div>
                     <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>@{p.username}</div>
+                    {exercises.length > 0 && (
+                      <div className="exercise-indicators" style={{ marginTop: 6 }}>
+                        {exercises.map((ex, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              width: 24,
+                              height: 4,
+                              borderRadius: 2,
+                              backgroundColor: ex.completed ? "var(--color-green)" : "var(--color-gray-200)",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
                     <button
                       className="btn btn-secondary"
                       style={{ padding: "6px 10px", fontSize: "12px", color: "var(--color-red)" }}
-                      onClick={() => handleRemovePatient(p._id)}
+                      onClick={(e) => { e.stopPropagation(); handleRemovePatient(p._id); }}
                       title="Remove patient"
                     >
                       <Trash2 size={14} />
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="card text-center" style={{ padding: "var(--space-xl)" }}>

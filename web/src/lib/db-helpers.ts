@@ -41,6 +41,8 @@ export interface DbExercise {
   defaultReps: number;
   defaultHoldSec: number;
   imageUrl?: string;
+  exerciseKey?: string;
+  skeletonDataFile?: string;
   createdAt: Date;
 }
 
@@ -78,6 +80,8 @@ export interface AssignmentExercise {
   holdSec: number;
   completed: boolean;
   completedAt?: Date;
+  exerciseKey?: string;
+  skeletonDataFile?: string;
 }
 
 export interface DbAssignment {
@@ -395,9 +399,19 @@ export async function getPatientsByTherapist(therapistId: string) {
 
   const streakMap = new Map(streaks.map((s) => [s.userId, s]));
 
+  // Fetch today's assignment for each patient
+  const today = new Date().toISOString().split("T")[0];
+  const assignments = await db
+    .collection<DbAssignment>("assignments")
+    .find({ userId: { $in: patientIds }, date: today })
+    .toArray();
+
+  const assignmentMap = new Map(assignments.map((a) => [a.userId, a]));
+
   return patients.map((p) => ({
     ...p,
     streak: streakMap.get(p._id.toString()) || null,
+    todayAssignment: assignmentMap.get(p._id.toString()) || null,
   }));
 }
 

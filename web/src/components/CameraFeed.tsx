@@ -5,9 +5,10 @@ import { useEffect, useRef, useState } from "react";
 interface CameraFeedProps {
   active: boolean;
   onPermissionDenied?: () => void;
+  onVideoReady?: (video: HTMLVideoElement) => void;
 }
 
-export default function CameraFeed({ active, onPermissionDenied }: CameraFeedProps) {
+export default function CameraFeed({ active, onPermissionDenied, onVideoReady }: CameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +39,9 @@ export default function CameraFeed({ active, onPermissionDenied }: CameraFeedPro
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+            if (videoRef.current) onVideoReady?.(videoRef.current);
+          };
         }
       } catch (err) {
         if (!cancelled) {
