@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getStreak } from "@/lib/db-helpers";
+import { getStreak, findUserById, getNotificationCount } from "@/lib/db-helpers";
 
 export async function GET() {
   const session = await getSession();
@@ -10,12 +10,22 @@ export async function GET() {
 
   const streak = await getStreak(session.userId);
 
+  let hasTherapist = false;
+  let notificationCount = 0;
+  if (session.role === "patient") {
+    const user = await findUserById(session.userId);
+    hasTherapist = (user?.therapistIds?.length ?? 0) > 0;
+    notificationCount = await getNotificationCount(session.userId);
+  }
+
   return NextResponse.json({
     user: {
       id: session.userId,
       username: session.username,
       name: session.name,
       role: session.role,
+      hasTherapist,
+      notificationCount,
     },
     streak: {
       currentStreak: streak.currentStreak,

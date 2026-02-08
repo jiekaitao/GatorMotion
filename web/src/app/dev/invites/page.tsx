@@ -2,24 +2,19 @@
 
 import { useEffect, useState, FormEvent } from "react";
 
-import { Copy, Check } from "lucide-react";
-
 interface Invite {
   _id: string;
   therapistId: string;
   therapistName: string;
-  patientEmail: string;
-  token: string;
+  patientUsername: string;
   status: string;
   createdAt: string;
-  expiresAt: string;
 }
 
 export default function DevInvitesPage() {
   const [invites, setInvites] = useState<Invite[]>([]);
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [sending, setSending] = useState(false);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -45,7 +40,7 @@ export default function DevInvitesPage() {
       const res = await fetch("/api/invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientEmail: email }),
+        body: JSON.stringify({ username: username.trim() }),
       });
 
       const data = await res.json();
@@ -55,20 +50,13 @@ export default function DevInvitesPage() {
         return;
       }
 
-      setEmail("");
+      setUsername("");
       fetchInvites();
     } catch {
       setError("Something went wrong");
     } finally {
       setSending(false);
     }
-  }
-
-  function copyLink(token: string) {
-    const link = `${window.location.origin}/register/invite/${token}`;
-    navigator.clipboard.writeText(link);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2000);
   }
 
   return (
@@ -87,11 +75,11 @@ export default function DevInvitesPage() {
           </p>
           <form onSubmit={handleCreate} style={{ display: "flex", gap: "var(--space-sm)" }}>
             <input
-              type="email"
+              type="text"
               className="input"
-              placeholder="patient@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="patient username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
               style={{ flex: 1 }}
             />
@@ -114,7 +102,7 @@ export default function DevInvitesPage() {
               {invites.map((inv) => (
                 <div key={inv._id} className="card" style={{ fontSize: "var(--text-small)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-xs)" }}>
-                    <span style={{ fontWeight: 700 }}>{inv.patientEmail}</span>
+                    <span style={{ fontWeight: 700 }}>{inv.patientUsername}</span>
                     <div className="badge" style={{
                       backgroundColor: inv.status === "pending" ? "var(--color-blue-light)" : inv.status === "accepted" ? "var(--color-primary-light)" : "var(--color-gray-100)",
                       color: inv.status === "pending" ? "var(--color-blue)" : inv.status === "accepted" ? "var(--color-primary-dark)" : "var(--color-gray-400)",
@@ -122,22 +110,9 @@ export default function DevInvitesPage() {
                       {inv.status}
                     </div>
                   </div>
-                  <div className="text-tiny" style={{ color: "var(--color-gray-300)", marginBottom: "var(--space-xs)" }}>
-                    From: {inv.therapistName} &middot; Expires: {new Date(inv.expiresAt).toLocaleDateString()}
+                  <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>
+                    From: {inv.therapistName} &middot; Created: {new Date(inv.createdAt).toLocaleDateString()}
                   </div>
-                  {inv.status === "pending" && (
-                    <button
-                      className="btn btn-secondary"
-                      style={{ padding: "4px 10px", fontSize: "12px", marginTop: "var(--space-xs)" }}
-                      onClick={() => copyLink(inv.token)}
-                    >
-                      {copiedToken === inv.token ? (
-                        <><Check size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} /> Copied!</>
-                      ) : (
-                        <><Copy size={12} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} /> Copy Signup Link</>
-                      )}
-                    </button>
-                  )}
                 </div>
               ))}
             </div>

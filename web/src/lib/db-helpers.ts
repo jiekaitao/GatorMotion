@@ -1,6 +1,5 @@
 import { getDb } from "./mongodb";
 import { ObjectId } from "mongodb";
-import crypto from "crypto";
 
 // ── Users ──
 
@@ -9,7 +8,7 @@ export interface DbUser {
   username: string;
   name: string;
   role: "patient" | "therapist";
-  therapistId?: string;
+  therapistIds?: string[];
   createdAt: Date;
 }
 
@@ -257,38 +256,26 @@ export interface DbInvite {
   _id: ObjectId;
   therapistId: string;
   therapistName: string;
-  patientEmail: string;
-  token: string;
-  status: "pending" | "accepted" | "expired" | "revoked";
+  patientId: string;
+  patientUsername: string;
+  status: "pending" | "accepted" | "declined" | "revoked";
   createdAt: Date;
-  expiresAt: Date;
 }
 
 export async function createInvite(data: {
   therapistId: string;
   therapistName: string;
-  patientEmail: string;
+  patientId: string;
+  patientUsername: string;
 }) {
   const db = await getDb();
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
-
   const result = await db.collection("invites").insertOne({
     ...data,
-    patientEmail: data.patientEmail.toLowerCase(),
-    token,
     status: "pending",
     createdAt: new Date(),
-    expiresAt,
   });
 
-  return { insertedId: result.insertedId, token };
-}
-
-export async function findInviteByToken(token: string) {
-  const db = await getDb();
-  return db.collection<DbInvite>("invites").findOne({ token });
+  return { insertedId: result.insertedId };
 }
 
 export async function getInvitesByTherapist(therapistId: string) {
@@ -300,35 +287,67 @@ export async function getInvitesByTherapist(therapistId: string) {
     .toArray();
 }
 
-export async function acceptInvite(token: string, patientId: string) {
+export async function acceptInvite(inviteId: string) {
   const db = await getDb();
-  const invite = await findInviteByToken(token);
+  const invite = await db
+    .collection<DbInvite>("invites")
+    .findOne({ _id: new ObjectId(inviteId) });
   if (!invite || invite.status !== "pending") return null;
-  if (new Date() > invite.expiresAt) {
-    await db.collection("invites").updateOne({ token }, { $set: { status: "expired" } });
-    return null;
-  }
 
   // Mark invite accepted
   await db.collection("invites").updateOne(
-    { token },
+    { _id: new ObjectId(inviteId) },
     { $set: { status: "accepted" } }
   );
 
-  // Link patient to therapist
+  // Add therapist to patient's therapistIds array
   await db.collection("users").updateOne(
-    { _id: new ObjectId(patientId) },
-    { $set: { therapistId: invite.therapistId } }
+    { _id: new ObjectId(invite.patientId) },
+    { $addToSet: { therapistIds: invite.therapistId } }
   );
 
   return invite;
 }
 
-export async function revokeInvite(token: string, therapistId: string) {
+export async function declineInvite(inviteId: string) {
   const db = await getDb();
   const result = await db.collection("invites").updateOne(
-    { token, therapistId, status: "pending" },
+    { _id: new ObjectId(inviteId), status: "pending" },
+    { $set: { status: "declined" } }
+  );
+  return result.modifiedCount > 0;
+}
+
+export async function getNotificationsForUser(userId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbInvite>("invites")
+    .find({ patientId: userId, status: "pending" })
+    .sort({ createdAt: -1 })
+    .toArray();
+}
+
+export async function getNotificationCount(userId: string) {
+  const db = await getDb();
+  return db
+    .collection<DbInvite>("invites")
+    .countDocuments({ patientId: userId, status: "pending" });
+}
+
+export async function revokeInvite(inviteId: string, therapistId: string) {
+  const db = await getDb();
+  const result = await db.collection("invites").updateOne(
+    { _id: new ObjectId(inviteId), therapistId, status: "pending" },
     { $set: { status: "revoked" } }
+  );
+  return result.modifiedCount > 0;
+}
+
+export async function removeRelationship(patientId: string, therapistId: string) {
+  const db = await getDb();
+  const result = await db.collection("users").updateOne(
+    { _id: new ObjectId(patientId) },
+    { $pull: { therapistIds: therapistId } as Record<string, unknown> }
   );
   return result.modifiedCount > 0;
 }
@@ -337,7 +356,7 @@ export async function getPatientsByTherapist(therapistId: string) {
   const db = await getDb();
   const patients = await db
     .collection<DbUser>("users")
-    .find({ therapistId, role: "patient" })
+    .find({ therapistIds: therapistId, role: "patient" })
     .sort({ name: 1 })
     .toArray();
 

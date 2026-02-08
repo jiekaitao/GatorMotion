@@ -17,23 +17,25 @@ export async function GET() {
 
   const conversations = await getConversationList(session.userId);
 
-  // For patients: if no conversations yet but they have a therapist, show them
+  // For patients: if no conversations yet but they have therapists, show them
   if (session.role === "patient" && conversations.length === 0) {
     const user = await findUserById(session.userId);
-    if (user?.therapistId) {
-      const therapist = await findUserById(user.therapistId);
-      if (therapist) {
-        return NextResponse.json({
-          conversations: [
-            {
-              partnerId: therapist._id.toString(),
-              partnerName: therapist.name,
-              partnerRole: "therapist",
-              lastMessage: null,
-              unreadCount: 0,
-            },
-          ],
-        });
+    if (user?.therapistIds?.length) {
+      const therapistConvos = [];
+      for (const tId of user.therapistIds) {
+        const therapist = await findUserById(tId);
+        if (therapist) {
+          therapistConvos.push({
+            partnerId: therapist._id.toString(),
+            partnerName: therapist.name,
+            partnerRole: "therapist",
+            lastMessage: null,
+            unreadCount: 0,
+          });
+        }
+      }
+      if (therapistConvos.length > 0) {
+        return NextResponse.json({ conversations: therapistConvos });
       }
     }
   }

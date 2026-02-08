@@ -15,6 +15,7 @@ import {
   Star,
   MessageCircle,
   User,
+  UserPlus,
 } from "lucide-react";
 
 interface Exercise {
@@ -42,7 +43,7 @@ interface Conversation {
 }
 
 interface UserData {
-  user: { id: string; name: string; email: string; role: string };
+  user: { id: string; name: string; username: string; role: string; hasTherapist?: boolean };
   streak: { currentStreak: number; longestStreak: number; lastCompletedDate: string | null };
 }
 
@@ -125,6 +126,7 @@ export default function HomePage() {
   }
 
   // Patient view
+  const hasTherapist = userData.user.hasTherapist !== false;
   const exercises = assignment?.exercises || [];
   const completedCount = exercises.filter((e) => e.completed).length;
   const totalCount = exercises.length;
@@ -136,6 +138,43 @@ export default function HomePage() {
   return (
     <>
       <div className="page">
+
+        {/* ── No Therapist Banner ── */}
+        {!hasTherapist && (
+          <div
+            className="animate-in"
+            style={{
+              padding: "var(--space-lg)",
+              borderRadius: "var(--radius-xl)",
+              border: "2px dashed var(--color-gray-200)",
+              backgroundColor: "var(--color-snow, #f9fafb)",
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-md)",
+              marginBottom: "var(--space-xl)",
+            }}
+          >
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: "var(--radius-full)",
+                backgroundColor: "var(--color-blue-light)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <UserPlus size={28} color="var(--color-blue)" />
+            </div>
+            <p style={{ fontWeight: 600, color: "var(--color-gray-500)", lineHeight: 1.4 }}>
+              Ask your physical therapist to add your username,{" "}
+              <strong style={{ color: "var(--color-gray-600, #333)" }}>{userData.user.username}</strong>
+              , as their patient
+            </p>
+          </div>
+        )}
 
         {/* ── Daily Progress Hero Card ── */}
         {totalCount > 0 && <section
@@ -222,7 +261,7 @@ export default function HomePage() {
         </section>}
 
         {/* ── Two-Column Dashboard Grid ── */}
-        <div className="home-grid" style={{ marginTop: "var(--space-xl)" }}>
+        <div className="home-grid" style={{ marginTop: "var(--space-xl)", ...(!hasTherapist ? { opacity: 0.45, pointerEvents: "none", filter: "grayscale(0.4)" } : {}) }}>
 
         {/* ── Today's Plan Section ── */}
         <section>
@@ -558,7 +597,7 @@ export default function HomePage() {
               <MessageCircle size={36} color="var(--color-gray-200)" style={{ margin: "0 auto var(--space-sm)" }} />
               <p style={{ color: "var(--color-gray-300)", fontWeight: 600 }}>No conversations yet</p>
               <p className="text-small" style={{ marginTop: "var(--space-xs)" }}>
-                Your therapist will appear here once they invite you.
+                Your therapist will appear here once they message you.
               </p>
             </div>
           )}

@@ -3,23 +3,21 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { UserPlus, Copy, X, Check, Mail, Flame, Clock } from "lucide-react";
+import { UserPlus, X, Clock, Trash2 } from "lucide-react";
 
 interface Patient {
   _id: string;
   name: string;
-  email: string;
+  username: string;
   createdAt: string;
   streak: { currentStreak: number; longestStreak: number; lastCompletedDate: string | null } | null;
 }
 
 interface Invite {
   _id: string;
-  patientEmail: string;
-  token: string;
+  patientUsername: string;
   status: string;
   createdAt: string;
-  expiresAt: string;
 }
 
 export default function TherapistPatientsPage() {
@@ -27,9 +25,8 @@ export default function TherapistPatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteUsername, setInviteUsername] = useState("");
   const [sending, setSending] = useState(false);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
@@ -55,13 +52,14 @@ export default function TherapistPatientsPage() {
   async function handleSendInvite(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccessMsg("");
     setSending(true);
 
     try {
       const res = await fetch("/api/invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientEmail: inviteEmail }),
+        body: JSON.stringify({ username: inviteUsername.trim() }),
       });
 
       const data = await res.json();
@@ -71,13 +69,9 @@ export default function TherapistPatientsPage() {
         return;
       }
 
-      setInviteEmail("");
-
-      // Show feedback if auto-linked
-      if (data.autoLinked) {
-        setSuccessMsg(data.message || "Patient linked!");
-        setTimeout(() => setSuccessMsg(""), 4000);
-      }
+      setInviteUsername("");
+      setSuccessMsg("Invite sent!");
+      setTimeout(() => setSuccessMsg(""), 4000);
 
       // Refresh invites + patients
       const [iRes, pRes] = await Promise.all([
@@ -95,16 +89,20 @@ export default function TherapistPatientsPage() {
     }
   }
 
-  async function handleRevoke(token: string) {
-    await fetch(`/api/invites/${token}`, { method: "DELETE" });
-    setInvites((prev) => prev.map((inv) => inv.token === token ? { ...inv, status: "revoked" } : inv));
+  async function handleRevoke(inviteId: string) {
+    await fetch(`/api/invites/${inviteId}`, { method: "DELETE" });
+    setInvites((prev) => prev.map((inv) => inv._id === inviteId ? { ...inv, status: "revoked" } : inv));
   }
 
-  function copyInviteLink(token: string) {
-    const link = `${window.location.origin}/register/invite/${token}`;
-    navigator.clipboard.writeText(link);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2000);
+  async function handleRemovePatient(patientId: string) {
+    try {
+      const res = await fetch(`/api/relationships/${patientId}`, { method: "DELETE" });
+      if (res.ok) {
+        setPatients((prev) => prev.filter((p) => p._id !== patientId));
+      }
+    } catch {
+      // ignore
+    }
   }
 
   if (loading) {
@@ -130,11 +128,11 @@ export default function TherapistPatientsPage() {
           </div>
           <form onSubmit={handleSendInvite} style={{ display: "flex", gap: "var(--space-sm)" }}>
             <input
-              type="email"
+              type="text"
               className="input"
-              placeholder="patient@email.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="patient username"
+              value={inviteUsername}
+              onChange={(e) => setInviteUsername(e.target.value)}
               required
               style={{ flex: 1 }}
             />
@@ -154,30 +152,23 @@ export default function TherapistPatientsPage() {
         {pendingInvites.length > 0 && (
           <div className="animate-in" style={{ animationDelay: "60ms", marginBottom: "var(--space-lg)" }}>
             <h3 style={{ color: "var(--color-gray-400)", marginBottom: "var(--space-sm)", fontWeight: 600 }}>
-              <Mail size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: "6px" }} />
+              <Clock size={16} style={{ display: "inline", verticalAlign: "middle", marginRight: "6px" }} />
               Pending Invites ({pendingInvites.length})
             </h3>
             <div className="stack stack-sm">
               {pendingInvites.map((inv) => (
                 <div key={inv._id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: "var(--text-small)" }}>{inv.patientEmail}</div>
+                    <div style={{ fontWeight: 600, fontSize: "var(--text-small)" }}>{inv.patientUsername}</div>
                     <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>
-                      Expires {new Date(inv.expiresAt).toLocaleDateString()}
+                      Sent {new Date(inv.createdAt).toLocaleDateString()}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: "var(--space-xs)" }}>
                     <button
                       className="btn btn-secondary"
-                      style={{ padding: "6px 10px", fontSize: "12px" }}
-                      onClick={() => copyInviteLink(inv.token)}
-                    >
-                      {copiedToken === inv.token ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
-                    <button
-                      className="btn btn-secondary"
                       style={{ padding: "6px 10px", fontSize: "12px", color: "var(--color-red)" }}
-                      onClick={() => handleRevoke(inv.token)}
+                      onClick={() => handleRevoke(inv._id)}
                     >
                       <X size={14} />
                     </button>
@@ -199,19 +190,17 @@ export default function TherapistPatientsPage() {
                 <div key={p._id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div>
                     <div style={{ fontWeight: 700 }}>{p.name}</div>
-                    <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>{p.email}</div>
+                    <div className="text-tiny" style={{ color: "var(--color-gray-300)" }}>@{p.username}</div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-md)", fontSize: "var(--text-small)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-orange)" }}>
-                      <Flame size={16} />
-                      <span style={{ fontWeight: 700 }}>{p.streak?.currentStreak ?? 0}</span>
-                    </div>
-                    {p.streak?.lastCompletedDate && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "4px", color: "var(--color-gray-300)" }}>
-                        <Clock size={14} />
-                        <span className="text-tiny">{p.streak.lastCompletedDate}</span>
-                      </div>
-                    )}
+                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-sm)" }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: "6px 10px", fontSize: "12px", color: "var(--color-red)" }}
+                      onClick={() => handleRemovePatient(p._id)}
+                      title="Remove patient"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -237,7 +226,7 @@ export default function TherapistPatientsPage() {
             <div className="stack stack-sm">
               {pastInvites.map((inv) => (
                 <div key={inv._id} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", opacity: 0.6 }}>
-                  <div className="text-small">{inv.patientEmail}</div>
+                  <div className="text-small">{inv.patientUsername}</div>
                   <div className="badge" style={{
                     backgroundColor: inv.status === "accepted" ? "var(--color-primary-light)" : "var(--color-gray-100)",
                     color: inv.status === "accepted" ? "var(--color-primary-dark)" : "var(--color-gray-400)",
