@@ -46,6 +46,22 @@ export default function BackendNotice() {
           designed to work.
         </p>
 
+        <div style={{
+          backgroundColor: "var(--color-snow, #f0f4f4)",
+          borderRadius: "var(--radius-lg, 12px)",
+          padding: "12px 16px",
+          marginBottom: "4px",
+        }}>
+          <p style={{ fontSize: "14px", fontWeight: 700, color: "var(--color-gray-600, #333)", marginBottom: 6 }}>
+            How to log in:
+          </p>
+          <p style={{ fontSize: "14px", color: "var(--color-gray-400, #666)", lineHeight: 1.5 }}>
+            Enter <strong>any username</strong> to log in as a patient. Include
+            {" "}<strong>&quot;therapist&quot;</strong> in the username (e.g. &quot;therapist&quot;) to
+            log in as a therapist and see the provider view.
+          </p>
+        </div>
+
         <div className="backend-notice-contact">
           <p className="backend-notice-contact-label">Questions? Reach out to:</p>
           <a
