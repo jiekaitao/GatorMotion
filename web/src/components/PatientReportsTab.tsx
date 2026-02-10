@@ -123,8 +123,8 @@ export default function PatientReportsTab({ sessions, assignments, streak, patie
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
               <XAxis dataKey="date" fontSize={11} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} fontSize={11} />
-              <Tooltip formatter={(value) => [`${value}%`, "Completion"]} />
+              <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} fontSize={11} />
+              <Tooltip formatter={(value: number | undefined) => [`${value}%`, "Completion"]} />
               <Area
                 type="monotone"
                 dataKey="pct"
@@ -150,8 +150,8 @@ export default function PatientReportsTab({ sessions, assignments, streak, patie
             <AreaChart data={formTrendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
               <XAxis dataKey="date" fontSize={11} />
-              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} fontSize={11} />
-              <Tooltip formatter={(value, name) => [`${value}%`, String(name)]} />
+              <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} fontSize={11} />
+              <Tooltip formatter={(value: number | undefined, name: string | undefined) => [`${value}%`, String(name)]} />
               <Area type="monotone" dataKey="good" stackId="1" stroke={COLORS.good} fill={COLORS.good} fillOpacity={0.6} />
               <Area type="monotone" dataKey="warning" stackId="1" stroke={COLORS.warning} fill={COLORS.warning} fillOpacity={0.6} />
               <Area type="monotone" dataKey="neutral" stackId="1" stroke={COLORS.neutral} fill={COLORS.neutral} fillOpacity={0.6} />
@@ -187,8 +187,8 @@ export default function PatientReportsTab({ sessions, assignments, streak, patie
               <XAxis dataKey="date" fontSize={11} />
               <YAxis allowDecimals={false} fontSize={11} />
               <Tooltip
-                formatter={(value) => [`${value}`, "Distress events"]}
-                labelFormatter={(label) => `${label}`}
+                formatter={(value: number | undefined) => [`${value}`, "Distress events"]}
+                labelFormatter={(label: unknown) => `${label}`}
               />
               <Bar dataKey="count" fill={COLORS.pain} radius={[4, 4, 0, 0]} maxBarSize={30} />
             </BarChart>

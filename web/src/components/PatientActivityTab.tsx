@@ -232,11 +232,11 @@ function SessionDetailCharts({ session }: { session: SessionData }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="sec" tickFormatter={(v) => `${v}s`} fontSize={10} />
+              <XAxis dataKey="sec" tickFormatter={(v: number) => `${v}s`} fontSize={10} />
               <YAxis fontSize={10} allowDecimals={false} />
               <Tooltip
-                formatter={(value) => [`${value} reps`, "Cumulative"]}
-                labelFormatter={(label) => `${label}s`}
+                formatter={(value: number | undefined) => [`${value} reps`, "Cumulative"]}
+                labelFormatter={(label: unknown) => `${label}s`}
               />
               <Area
                 type="stepAfter"

@@ -1,15 +1,27 @@
 services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo-seed/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+      - ./mongo-seed:/docker-entrypoint-initdb.d/seed:ro
+    networks:
+      - internal
+    restart: unless-stopped
+
   nextjs:
     build:
       context: ./web
       args:
         - NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
     environment:
-      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_URI=mongodb://mongo:27017/pt_app
       - JWT_SECRET=${JWT_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - mongo
     networks:
       - internal
     restart: unless-stopped
@@ -30,12 +42,6 @@ services:
     build: ./nginx
     ports:
       - "80:80"
-      - "443:443"
-    environment:
-      - DOMAIN=${DOMAIN}
-    volumes:
-      - certbot-conf:/etc/letsencrypt
-      - certbot-www:/var/www/certbot
     depends_on:
       - nextjs
       - cv-api
@@ -44,17 +50,8 @@ services:
       - internal
     restart: unless-stopped
 
-  certbot:
-    image: certbot/certbot
-    volumes:
-      - certbot-conf:/etc/letsencrypt
-      - certbot-www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'"
-    restart: unless-stopped
-
 volumes:
-  certbot-conf:
-  certbot-www:
+  mongo-data:
 
 networks:
   internal:

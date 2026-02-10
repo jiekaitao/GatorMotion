@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import AppShell from "./AppShell";
 import { ToastContainer } from "./Toast";
+import BackendNotice from "./BackendNotice";
 
 const NO_SHELL_ROUTES = ["/login", "/register", "/exercise"];
 
@@ -15,6 +16,7 @@ export default function AppShellWrapper({ children }: { children: React.ReactNod
       <>
         <AppShell>{children}</AppShell>
         <ToastContainer />
+        <BackendNotice />
       </>
     );
   }
@@ -23,6 +25,7 @@ export default function AppShellWrapper({ children }: { children: React.ReactNod
     <>
       {children}
       <ToastContainer />
+      <BackendNotice />
     </>
   );
 }

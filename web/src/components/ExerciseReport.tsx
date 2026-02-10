@@ -164,11 +164,11 @@ export default function ExerciseReport({ sessionId }: ExerciseReportProps) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-              <XAxis dataKey="sec" tickFormatter={(v) => `${v}s`} fontSize={11} />
+              <XAxis dataKey="sec" tickFormatter={(v: number) => `${v}s`} fontSize={11} />
               <YAxis fontSize={11} allowDecimals={false} />
               <Tooltip
-                formatter={(value) => [`${value} reps`, "Cumulative"]}
-                labelFormatter={(label) => `${label}s`}
+                formatter={(value: number | undefined) => [`${value} reps`, "Cumulative"]}
+                labelFormatter={(label: unknown) => `${label}s`}
               />
               <Area
                 type="stepAfter"
@@ -217,17 +217,17 @@ export default function ExerciseReport({ sessionId }: ExerciseReportProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
               <XAxis
                 dataKey="timeSec"
-                tickFormatter={(v) => `${Math.round(v)}s`}
+                tickFormatter={(v: number) => `${Math.round(v)}s`}
                 fontSize={11}
               />
               <YAxis
                 fontSize={11}
                 domain={[0, "auto"]}
-                tickFormatter={(v) => v.toFixed(2)}
+                tickFormatter={(v: number) => v.toFixed(2)}
               />
               <Tooltip
-                formatter={(value) => [Number(value).toFixed(4), "RMS Divergence"]}
-                labelFormatter={(label) => `${Math.round(Number(label))}s`}
+                formatter={(value: number | undefined) => [Number(value).toFixed(4), "RMS Divergence"]}
+                labelFormatter={(label: unknown) => `${Math.round(Number(label))}s`}
               />
               <Area
                 type="monotone"
