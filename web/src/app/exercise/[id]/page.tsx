@@ -827,10 +827,29 @@ export default function ExercisePage({ params }: { params: Promise<{ id: string 
               overlayToggles={debugOpen ? { showUserWireframe, showRefWireframe, showArrows } : undefined}
             />
 
+            {process.env.NEXT_PUBLIC_DEMO_MODE === "true" && (
+              <div style={{
+                position: "absolute",
+                top: "var(--space-sm)",
+                right: "50%",
+                transform: "translateX(50%)",
+                backgroundColor: "rgba(255,150,0,0.92)",
+                color: "white",
+                borderRadius: "var(--radius-sm)",
+                padding: "3px 10px",
+                fontSize: "11px",
+                fontWeight: 700,
+                letterSpacing: "0.03em",
+                zIndex: 20,
+              }}>
+                Demo Mode — CV Offline
+              </div>
+            )}
+
             {formBadge && (
               <div className="animate-bounce-gentle" style={{
                 position: "absolute",
-                top: "var(--space-lg)",
+                top: process.env.NEXT_PUBLIC_DEMO_MODE === "true" ? "calc(var(--space-lg) + 24px)" : "var(--space-lg)",
                 left: "50%",
                 transform: "translateX(-50%)",
                 backgroundColor: "var(--color-white)",

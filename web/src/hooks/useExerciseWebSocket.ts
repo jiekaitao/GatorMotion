@@ -149,6 +149,11 @@ export function useExerciseWebSocket(exerciseKey: string | null): UseExerciseWeb
 
   // Connect WebSocket
   useEffect(() => {
+    // In demo mode, skip WebSocket entirely — no backend to connect to
+    if (typeof window !== "undefined" && process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+      return;
+    }
+
     if (!exerciseKey) {
       setConnected(false);
       setRepCount(0);

@@ -17,11 +17,18 @@ if (!globalWithMongo._mongoCache) {
 
 const cache = globalWithMongo._mongoCache;
 
+function isDemoMode(): boolean {
+  return process.env.NEXT_PUBLIC_DEMO_MODE === "true" || !process.env.MONGODB_URI;
+}
+
 function getMongoUri(): string {
   if (cachedMongoUri) return cachedMongoUri;
 
   const mongoUri = process.env.MONGODB_URI;
   if (!mongoUri) {
+    if (isDemoMode()) {
+      return "";
+    }
     throw new Error("MONGODB_URI is not defined in environment variables");
   }
 
@@ -30,10 +37,15 @@ function getMongoUri(): string {
 }
 
 export async function getClient(): Promise<MongoClient> {
+  const uri = getMongoUri();
+  if (!uri) {
+    throw new Error("Cannot connect to MongoDB in demo mode");
+  }
+
   if (cache.client) return cache.client;
 
   if (!cache.promise) {
-    cache.promise = MongoClient.connect(getMongoUri());
+    cache.promise = MongoClient.connect(uri);
   }
 
   cache.client = await cache.promise;
