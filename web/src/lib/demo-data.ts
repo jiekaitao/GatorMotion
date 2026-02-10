@@ -694,6 +694,18 @@ export function getDemoResponse(
 
   // ─── Dev routes ───
 
+  if (pathname === "/api/dev/stats" && method === "GET") {
+    return {
+      status: 200,
+      body: {
+        counts: { users: 3, exercises: 4, assignments: 3, streaks: 2 },
+        recentUsers: [],
+        recentAssignments: [],
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
+
   if (pathname.startsWith("/api/dev")) {
     return { status: 200, body: { success: true, demo: true } };
   }
